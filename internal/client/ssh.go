@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"os"
 	"regexp"
 	"sync"
 
@@ -438,19 +439,53 @@ func (c *SSHClient) ReadFile(ctx context.Context, path string) ([]byte, error) {
 }
 
 // DeleteFile removes a file from the remote system.
-// TODO: Implement SFTP file operations in Task 1.3
 func (c *SSHClient) DeleteFile(ctx context.Context, path string) error {
-	return errors.New("SFTP operations not yet implemented")
+	// Connect SFTP if needed (skip if already mocked)
+	if c.sftpClient == nil {
+		if err := c.connectSFTP(); err != nil {
+			return err
+		}
+	}
+
+	if err := c.sftpClient.Remove(path); err != nil {
+		return fmt.Errorf("failed to delete file %q: %w", path, err)
+	}
+
+	return nil
 }
 
 // FileExists checks if a file exists on the remote system.
-// TODO: Implement SFTP file operations in Task 1.3
 func (c *SSHClient) FileExists(ctx context.Context, path string) (bool, error) {
-	return false, errors.New("SFTP operations not yet implemented")
+	// Connect SFTP if needed (skip if already mocked)
+	if c.sftpClient == nil {
+		if err := c.connectSFTP(); err != nil {
+			return false, err
+		}
+	}
+
+	_, err := c.sftpClient.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to stat file %q: %w", path, err)
+	}
+
+	return true, nil
 }
 
 // MkdirAll creates a directory and all parent directories.
-// TODO: Implement SFTP file operations in Task 1.3
 func (c *SSHClient) MkdirAll(ctx context.Context, path string, mode fs.FileMode) error {
-	return errors.New("SFTP operations not yet implemented")
+	// Connect SFTP if needed (skip if already mocked)
+	if c.sftpClient == nil {
+		if err := c.connectSFTP(); err != nil {
+			return err
+		}
+	}
+
+	if err := c.sftpClient.MkdirAll(path); err != nil {
+		return fmt.Errorf("failed to create directory %q: %w", path, err)
+	}
+
+	return nil
 }

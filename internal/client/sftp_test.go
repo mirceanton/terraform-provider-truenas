@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"testing"
 	"time"
 )
@@ -292,5 +293,157 @@ func TestSSHClient_ReadFile_NotFound(t *testing.T) {
 	_, err := client.ReadFile(context.Background(), "/mnt/storage/missing.txt")
 	if err == nil {
 		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestSSHClient_DeleteFile_Success(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	var deletedPath string
+	mockSFTP := &mockSFTPClient{
+		removeFunc: func(path string) error {
+			deletedPath = path
+			return nil
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	err := client.DeleteFile(context.Background(), "/mnt/storage/test.txt")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if deletedPath != "/mnt/storage/test.txt" {
+		t.Errorf("expected path '/mnt/storage/test.txt', got %q", deletedPath)
+	}
+}
+
+func TestSSHClient_DeleteFile_NotFound(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	mockSFTP := &mockSFTPClient{
+		removeFunc: func(path string) error {
+			return errors.New("no such file")
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	err := client.DeleteFile(context.Background(), "/mnt/storage/missing.txt")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestSSHClient_FileExists_True(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	mockSFTP := &mockSFTPClient{
+		statFunc: func(path string) (fs.FileInfo, error) {
+			return &mockFileInfo{}, nil
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	exists, err := client.FileExists(context.Background(), "/mnt/storage/test.txt")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !exists {
+		t.Error("expected file to exist")
+	}
+}
+
+func TestSSHClient_FileExists_False(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	mockSFTP := &mockSFTPClient{
+		statFunc: func(path string) (fs.FileInfo, error) {
+			return nil, os.ErrNotExist
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	exists, err := client.FileExists(context.Background(), "/mnt/storage/missing.txt")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if exists {
+		t.Error("expected file to not exist")
+	}
+}
+
+func TestSSHClient_MkdirAll_Success(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	var createdPath string
+	mockSFTP := &mockSFTPClient{
+		mkdirAllFunc: func(path string) error {
+			createdPath = path
+			return nil
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	err := client.MkdirAll(context.Background(), "/mnt/storage/apps/myapp/config", 0755)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if createdPath != "/mnt/storage/apps/myapp/config" {
+		t.Errorf("expected path '/mnt/storage/apps/myapp/config', got %q", createdPath)
+	}
+}
+
+func TestSSHClient_MkdirAll_PermissionDenied(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	mockSFTP := &mockSFTPClient{
+		mkdirAllFunc: func(path string) error {
+			return errors.New("permission denied")
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	err := client.MkdirAll(context.Background(), "/mnt/storage/protected", 0755)
+	if err == nil {
+		t.Fatal("expected error for permission denied")
 	}
 }
