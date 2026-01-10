@@ -125,18 +125,26 @@ func TestProvider_DataSources(t *testing.T) {
 
 	dataSources := p.DataSources(context.Background())
 
-	// Verify it returns a slice (can be empty for now)
+	// Verify it returns a slice
 	if dataSources == nil {
 		t.Error("expected non-nil data sources slice")
 	}
 
-	// Currently no data sources are implemented
-	if len(dataSources) != 0 {
-		t.Errorf("expected 0 data sources, got %d", len(dataSources))
+	// Verify we have the expected data sources
+	if len(dataSources) != 1 {
+		t.Errorf("expected 1 data source, got %d", len(dataSources))
 	}
 
 	// Verify the return type
 	var _ []func() datasource.DataSource = dataSources
+
+	// Verify each factory function returns a valid data source
+	for i, factory := range dataSources {
+		ds := factory()
+		if ds == nil {
+			t.Errorf("data source factory %d returned nil", i)
+		}
+	}
 }
 
 func TestProvider_Resources(t *testing.T) {

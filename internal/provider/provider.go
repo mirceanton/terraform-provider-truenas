@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
+	"github.com/deevus/terraform-provider-truenas/internal/datasources"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
 	"github.com/hashicorp/terraform-plugin-framework/provider/schema"
@@ -137,7 +138,9 @@ func (p *TrueNASProvider) Configure(ctx context.Context, req provider.ConfigureR
 }
 
 func (p *TrueNASProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+	return []func() datasource.DataSource{
+		datasources.NewPoolDataSource,
+	}
 }
 
 func (p *TrueNASProvider) Resources(ctx context.Context) []func() resource.Resource {
