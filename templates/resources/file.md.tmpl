@@ -1,0 +1,59 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+### Using host_path reference
+
+Deploy configuration files within a managed host path directory:
+
+{{ tffile "examples/resources/file/resource.tf" }}
+
+### Using absolute path
+
+Deploy a file to a specific location:
+
+```terraform
+resource "truenas_file" "nginx_config" {
+  path    = "/mnt/tank/apps/nginx/nginx.conf"
+  content = file("${path.module}/nginx.conf")
+  mode    = "0644"
+  uid     = 0
+  gid     = 0
+}
+```
+
+### Using templatefile
+
+Deploy configuration from a template:
+
+```terraform
+resource "truenas_file" "app_env" {
+  path    = "/mnt/tank/apps/myapp/.env"
+  content = templatefile("${path.module}/env.tpl", {
+    database_url = var.database_url
+    api_key      = var.api_key
+  })
+  mode = "0600"
+  uid  = 1000
+  gid  = 1000
+}
+```
+
+## Import
+
+Files can be imported using their absolute path:
+
+```shell
+terraform import truenas_file.example /mnt/tank/apps/myapp/config.json
+```
+
+{{ .SchemaMarkdown | trimspace }}
