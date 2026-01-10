@@ -324,11 +324,50 @@ func (r *FileResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 }
 
 func (r *FileResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// Will be implemented in Phase 3
+	var data FileResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	fullPath := r.resolvePath(&data)
+	content := data.Content.ValueString()
+	mode := parseMode(data.Mode.ValueString())
+
+	// Write the updated file
+	if err := r.client.WriteFile(ctx, fullPath, []byte(content), mode); err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Update File",
+			fmt.Sprintf("Unable to write file %q: %s", fullPath, err.Error()),
+		)
+		return
+	}
+
+	// Update checksum
+	data.Checksum = types.StringValue(computeChecksum(content))
+	data.Path = types.StringValue(fullPath)
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *FileResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	// Will be implemented in Phase 3
+	var data FileResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	fullPath := data.Path.ValueString()
+
+	if err := r.client.DeleteFile(ctx, fullPath); err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Delete File",
+			fmt.Sprintf("Unable to delete file %q: %s", fullPath, err.Error()),
+		)
+		return
+	}
 }
 
 func (r *FileResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

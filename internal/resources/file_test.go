@@ -690,3 +690,176 @@ func TestFileResource_Read_ReadFileError(t *testing.T) {
 		t.Fatal("expected error when ReadFile fails")
 	}
 }
+
+// Update operation tests
+
+func TestFileResource_Update_ContentChange(t *testing.T) {
+	var writtenContent []byte
+
+	r := &FileResource{
+		client: &client.MockClient{
+			WriteFileFunc: func(ctx context.Context, path string, content []byte, mode fs.FileMode) error {
+				writtenContent = content
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	oldChecksum := computeChecksumForTest("old content")
+	newChecksum := computeChecksumForTest("new content")
+
+	stateValue := createFileResourceModel("/mnt/storage/test.txt", nil, nil, "/mnt/storage/test.txt", "old content", "0644", 0, 0, oldChecksum)
+	planValue := createFileResourceModel("/mnt/storage/test.txt", nil, nil, "/mnt/storage/test.txt", "new content", "0644", 0, 0, nil)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if string(writtenContent) != "new content" {
+		t.Errorf("expected content 'new content', got %q", string(writtenContent))
+	}
+
+	var model FileResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+
+	if model.Checksum.ValueString() != newChecksum {
+		t.Errorf("expected checksum %q, got %q", newChecksum, model.Checksum.ValueString())
+	}
+}
+
+func TestFileResource_Update_WriteError(t *testing.T) {
+	r := &FileResource{
+		client: &client.MockClient{
+			WriteFileFunc: func(ctx context.Context, path string, content []byte, mode fs.FileMode) error {
+				return errors.New("permission denied")
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	stateValue := createFileResourceModel("/mnt/storage/test.txt", nil, nil, "/mnt/storage/test.txt", "old content", "0644", 0, 0, "checksum")
+	planValue := createFileResourceModel("/mnt/storage/test.txt", nil, nil, "/mnt/storage/test.txt", "new content", "0644", 0, 0, nil)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for update write failure")
+	}
+}
+
+// Delete operation tests
+
+func TestFileResource_Delete_Success(t *testing.T) {
+	var deletedPath string
+
+	r := &FileResource{
+		client: &client.MockClient{
+			DeleteFileFunc: func(ctx context.Context, path string) error {
+				deletedPath = path
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	stateValue := createFileResourceModel("/mnt/storage/test.txt", nil, nil, "/mnt/storage/test.txt", "content", "0644", 0, 0, "checksum")
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if deletedPath != "/mnt/storage/test.txt" {
+		t.Errorf("expected path '/mnt/storage/test.txt', got %q", deletedPath)
+	}
+}
+
+func TestFileResource_Delete_Error(t *testing.T) {
+	r := &FileResource{
+		client: &client.MockClient{
+			DeleteFileFunc: func(ctx context.Context, path string) error {
+				return errors.New("permission denied")
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	stateValue := createFileResourceModel("/mnt/storage/test.txt", nil, nil, "/mnt/storage/test.txt", "content", "0644", 0, 0, "checksum")
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for delete failure")
+	}
+}
