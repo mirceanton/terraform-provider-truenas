@@ -365,6 +365,7 @@ func TestSSHClient_Call_WithParams(t *testing.T) {
 
 	mockSess := &mockSession{
 		outputFunc: func(cmd string) ([]byte, error) {
+			// shellescape.Quote wraps the JSON in single quotes
 			expected := `midclt call app.query '[{"name":"test"}]'`
 			if cmd != expected {
 				t.Errorf("expected command %q, got %q", expected, cmd)
@@ -458,6 +459,89 @@ func TestSSHClient_Call_ParamsMarshalError(t *testing.T) {
 	_, err := client.Call(context.Background(), "system.info", make(chan int))
 	if err == nil {
 		t.Fatal("expected error for unmarshalable params")
+	}
+}
+
+func TestSSHClient_Call_ShellEscaping(t *testing.T) {
+	// This test verifies that shell metacharacters are properly escaped
+	// to prevent command injection attacks
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	// Test with shell metacharacters that could be used for injection
+	testCases := []struct {
+		name           string
+		params         any
+		expectedSuffix string
+	}{
+		{
+			name:           "single quotes in params",
+			params:         map[string]string{"name": "test'; rm -rf /"},
+			expectedSuffix: `'{"name":"test'\'''; rm -rf /"}'`, // shellescape escapes single quotes
+		},
+		{
+			name:           "backticks in params",
+			params:         map[string]string{"cmd": "`whoami`"},
+			expectedSuffix: `'{"cmd":"\` + "`" + `whoami\` + "`" + `"}'`,
+		},
+		{
+			name:           "dollar sign in params",
+			params:         map[string]string{"var": "$(id)"},
+			expectedSuffix: `'{"var":"$(id)"}'`,
+		},
+		{
+			name:           "semicolon in params",
+			params:         map[string]string{"cmd": "; ls -la"},
+			expectedSuffix: `'{"cmd":"; ls -la"}'`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var capturedCmd string
+			mockSess := &mockSession{
+				outputFunc: func(cmd string) ([]byte, error) {
+					capturedCmd = cmd
+					return []byte(`{}`), nil
+				},
+			}
+
+			mockClient := &mockSSHClient{
+				newSessionFunc: func() (sshSession, error) {
+					return mockSess, nil
+				},
+			}
+
+			client.clientWrapper = mockClient
+
+			_, err := client.Call(context.Background(), "test.method", tc.params)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			expectedPrefix := "midclt call test.method "
+			if len(capturedCmd) <= len(expectedPrefix) {
+				t.Fatalf("command too short: %q", capturedCmd)
+			}
+
+			// Verify the command starts with the expected prefix
+			if capturedCmd[:len(expectedPrefix)] != expectedPrefix {
+				t.Errorf("expected prefix %q, got %q", expectedPrefix, capturedCmd[:len(expectedPrefix)])
+			}
+
+			// Verify the params are properly escaped (wrapped in single quotes)
+			suffix := capturedCmd[len(expectedPrefix):]
+			if suffix[0] != '\'' {
+				t.Errorf("expected params to start with single quote, got %q", suffix)
+			}
+			if suffix[len(suffix)-1] != '\'' {
+				t.Errorf("expected params to end with single quote, got %q", suffix)
+			}
+		})
 	}
 }
 

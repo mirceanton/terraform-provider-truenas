@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 
+	"al.essio.dev/pkg/shellescape"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -129,6 +130,9 @@ func (c *SSHClient) connect() error {
 		Auth: []ssh.AuthMethod{
 			ssh.PublicKeys(signer),
 		},
+		// TODO: InsecureIgnoreHostKey is insecure and should be replaced with
+		// proper host key verification in production. Consider adding known_hosts
+		// file support or host key fingerprint configuration.
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 
@@ -144,6 +148,8 @@ func (c *SSHClient) connect() error {
 }
 
 // Call executes a midclt command and returns the parsed JSON response.
+// Note: The ctx parameter is accepted for interface compatibility and future
+// use (e.g., command cancellation, timeouts) but is not currently used.
 func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	// Ensure we're connected (only if not already mocked)
 	if c.clientWrapper == nil {
@@ -159,7 +165,8 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 		if err != nil {
 			return nil, err
 		}
-		cmd = fmt.Sprintf("%s '%s'", cmd, string(paramsJSON))
+		// Use shellescape to prevent command injection via malicious params
+		cmd = fmt.Sprintf("%s %s", cmd, shellescape.Quote(string(paramsJSON)))
 	}
 
 	// Create session
