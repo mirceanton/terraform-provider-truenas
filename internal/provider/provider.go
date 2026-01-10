@@ -148,5 +148,6 @@ func (p *TrueNASProvider) DataSources(ctx context.Context) []func() datasource.D
 func (p *TrueNASProvider) Resources(ctx context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
 		resources.NewDatasetResource,
+		resources.NewHostPathResource,
 	}
 }
