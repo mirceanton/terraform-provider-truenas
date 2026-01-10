@@ -43,7 +43,7 @@ Expected: Contains all four dependencies
 **Step 4: Commit**
 
 ```bash
-jj describe -m "chore: initialize go module with dependencies"
+jj commit -m "chore: initialize go module with dependencies"
 ```
 
 ---
@@ -176,7 +176,7 @@ Expected: Lists all 6 tasks with descriptions
 **Step 10: Commit**
 
 ```bash
-jj describe -m "chore: add mise configuration and task runners"
+jj commit -m "chore: add mise configuration and task runners"
 ```
 
 ---
@@ -280,7 +280,7 @@ Expected: Binary `terraform-provider-truenas` created
 **Step 4: Commit**
 
 ```bash
-jj describe -m "chore: add main entry point and provider stub"
+jj commit -m "chore: add main entry point and provider stub"
 ```
 
 ---
@@ -474,7 +474,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-jj describe -m "feat(client): add error types and parsing"
+jj commit -m "feat(client): add error types and parsing"
 ```
 
 ---
@@ -604,7 +604,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-jj describe -m "feat(client): add Client interface and MockClient"
+jj commit -m "feat(client): add Client interface and MockClient"
 ```
 
 ---
@@ -866,7 +866,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-jj describe -m "feat(client): add SSH client implementation"
+jj commit -m "feat(client): add SSH client implementation"
 ```
 
 ---
@@ -1185,7 +1185,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-jj describe -m "feat(client): add job polling with exponential backoff"
+jj commit -m "feat(client): add job polling with exponential backoff"
 ```
 
 ---
@@ -1341,7 +1341,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-jj describe -m "feat(client): add midclt command builder and param types"
+jj commit -m "feat(client): add midclt command builder and param types"
 ```
 
 ---
@@ -1608,7 +1608,7 @@ Expected: PASS
 **Step 5: Commit**
 
 ```bash
-jj describe -m "feat(provider): add provider schema with SSH configuration"
+jj commit -m "feat(provider): add provider schema with SSH configuration"
 ```
 
 ---
@@ -1882,7 +1882,7 @@ Add import: `"github.com/dsh/terraform-provider-truenas/internal/datasources"`
 **Step 6: Commit**
 
 ```bash
-jj describe -m "feat(datasources): add truenas_pool data source"
+jj commit -m "feat(datasources): add truenas_pool data source"
 ```
 
 ---
@@ -2163,7 +2163,7 @@ func (p *TrueNASProvider) DataSources(ctx context.Context) []func() datasource.D
 **Step 6: Commit**
 
 ```bash
-jj describe -m "feat(datasources): add truenas_dataset data source"
+jj commit -m "feat(datasources): add truenas_dataset data source"
 ```
 
 ---
@@ -2621,7 +2621,7 @@ Add import: `"github.com/dsh/terraform-provider-truenas/internal/resources"`
 **Step 6: Commit**
 
 ```bash
-jj describe -m "feat(resources): add truenas_dataset resource"
+jj commit -m "feat(resources): add truenas_dataset resource"
 ```
 
 ---
