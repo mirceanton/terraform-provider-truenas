@@ -1,6 +1,7 @@
 package client
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -58,11 +59,9 @@ func TestBuildCommand_StringParam(t *testing.T) {
 
 func TestBuildCommand_AppCreateParams(t *testing.T) {
 	params := AppCreateParams{
-		AppName:   "myapp",
-		CustomApp: true,
-		Values: AppValues{
-			Labels: []string{"test"},
-		},
+		AppName:                   "myapp",
+		CustomApp:                 true,
+		CustomComposeConfigString: "services:\n  web:\n    image: nginx",
 	}
 
 	got := BuildCommand("app.create", params)
@@ -111,22 +110,12 @@ func TestBuildCommand_SpecialCharacters(t *testing.T) {
 	}
 }
 
-func TestBuildCommand_StorageConfig(t *testing.T) {
+func TestBuildCommand_AppCreateParamsWithCompose(t *testing.T) {
+	// Test that compose config is properly serialized
 	params := AppCreateParams{
-		AppName:   "myapp",
-		CustomApp: true,
-		Values: AppValues{
-			Storage: map[string]StorageConfig{
-				"data": {
-					Type: "hostPath",
-					HostPathConfig: HostPathConfig{
-						ACLEnable:       false,
-						AutoPermissions: true,
-						Path:            "/mnt/tank/data",
-					},
-				},
-			},
-		},
+		AppName:                   "myapp",
+		CustomApp:                 true,
+		CustomComposeConfigString: "services:\n  nginx:\n    image: nginx:alpine",
 	}
 
 	got := BuildCommand("app.create", params)
@@ -134,23 +123,10 @@ func TestBuildCommand_StorageConfig(t *testing.T) {
 	if got == "" {
 		t.Error("BuildCommand() returned empty string")
 	}
-}
 
-func TestBuildCommand_NetworkConfig(t *testing.T) {
-	params := AppValues{
-		Network: map[string]NetworkConfig{
-			"web": {
-				BindMode:   "hostPort",
-				HostIPs:    []string{"0.0.0.0"},
-				PortNumber: 8080,
-			},
-		},
-	}
-
-	got := BuildCommand("app.update", params)
-
-	if got == "" {
-		t.Error("BuildCommand() returned empty string")
+	// Should contain the compose config in JSON
+	if !strings.Contains(got, "custom_compose_config_string") {
+		t.Errorf("BuildCommand() = %q, expected to contain 'custom_compose_config_string'", got)
 	}
 }
 
@@ -160,6 +136,32 @@ func TestBuildCommand_MarshalError(t *testing.T) {
 
 	got := BuildCommand("test.method", params)
 	want := "midclt call test.method"
+
+	if got != want {
+		t.Errorf("BuildCommand() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildCommand_PositionalArgs(t *testing.T) {
+	// Test []any slices get passed as separate positional arguments
+	// This is needed for CRUD update methods: app.update name {data}
+	params := []any{"myapp", map[string]any{"custom_compose_config_string": "services:\n  web:\n    image: nginx"}}
+
+	got := BuildCommand("app.update", params)
+	want := `midclt call app.update '"myapp"' '{"custom_compose_config_string":"services:\n  web:\n    image: nginx"}'`
+
+	if got != want {
+		t.Errorf("BuildCommand() = %q, want %q", got, want)
+	}
+}
+
+func TestBuildCommand_PositionalArgsWithUnmarshallable(t *testing.T) {
+	// Test that unmarshallable elements in []any are skipped
+	params := []any{"myapp", make(chan int), map[string]any{"key": "value"}}
+
+	got := BuildCommand("app.update", params)
+	// The channel is skipped, so we get: "myapp" {"key": "value"}
+	want := `midclt call app.update '"myapp"' '{"key":"value"}'`
 
 	if got != want {
 		t.Errorf("BuildCommand() = %q, want %q", got, want)

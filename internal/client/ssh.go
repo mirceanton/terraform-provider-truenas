@@ -1,15 +1,20 @@
 package client
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sync"
 
 	"al.essio.dev/pkg/shellescape"
 	"golang.org/x/crypto/ssh"
 )
+
+// ansiRegex matches ANSI escape sequences.
+var ansiRegex = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]|\x1b\][^\x07]*\x07`)
 
 // SSHConfig holds configuration for SSH connection to TrueNAS.
 type SSHConfig struct {
@@ -64,6 +69,7 @@ func (d *defaultDialer) Dial(network, addr string, config *ssh.ClientConfig) (*s
 type sshSession interface {
 	Run(cmd string) error
 	Output(cmd string) ([]byte, error)
+	CombinedOutput(cmd string) ([]byte, error)
 	Close() error
 }
 
@@ -147,6 +153,35 @@ func (c *SSHClient) connect() error {
 	return nil
 }
 
+// serializeParams converts params to shell-escaped command arguments.
+// If params is a []any slice, each element becomes a separate argument.
+// This is needed for TrueNAS CRUD update methods which expect (id, data) as separate args.
+func serializeParams(params any) (string, error) {
+	if params == nil {
+		return "", nil
+	}
+
+	// Handle []any slices specially - each element becomes a separate argument
+	if slice, ok := params.([]any); ok {
+		var args string
+		for _, arg := range slice {
+			argJSON, err := json.Marshal(arg)
+			if err != nil {
+				return "", err
+			}
+			args += " " + shellescape.Quote(string(argJSON))
+		}
+		return args, nil
+	}
+
+	// Default: serialize as single argument
+	paramsJSON, err := json.Marshal(params)
+	if err != nil {
+		return "", err
+	}
+	return " " + shellescape.Quote(string(paramsJSON)), nil
+}
+
 // Call executes a midclt command and returns the parsed JSON response.
 // Note: The ctx parameter is accepted for interface compatibility and future
 // use (e.g., command cancellation, timeouts) but is not currently used.
@@ -158,16 +193,13 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 		}
 	}
 
-	// Build command
-	cmd := fmt.Sprintf("midclt call %s", method)
-	if params != nil {
-		paramsJSON, err := json.Marshal(params)
-		if err != nil {
-			return nil, err
-		}
-		// Use shellescape to prevent command injection via malicious params
-		cmd = fmt.Sprintf("%s %s", cmd, shellescape.Quote(string(paramsJSON)))
+	// Build command (use sudo for non-root users with sudo access)
+	cmd := fmt.Sprintf("sudo midclt call %s", method)
+	paramsStr, err := serializeParams(params)
+	if err != nil {
+		return nil, err
 	}
+	cmd += paramsStr
 
 	// Create session
 	session, err := c.clientWrapper.NewSession()
@@ -176,9 +208,13 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 	}
 	defer session.Close()
 
-	// Execute command
-	output, err := session.Output(cmd)
+	// Execute command - use CombinedOutput to capture stderr for error messages
+	output, err := session.CombinedOutput(cmd)
 	if err != nil {
+		// Include the output (which contains stderr) in the error message
+		if len(output) > 0 {
+			return nil, fmt.Errorf("%w: %s", err, string(output))
+		}
 		return nil, err
 	}
 
@@ -186,10 +222,55 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 }
 
 // CallAndWait executes a command and waits for job completion.
-// For now, this simply delegates to Call. Future implementation
-// may add job polling logic.
+// Uses midclt's -j flag to wait for long-running jobs.
 func (c *SSHClient) CallAndWait(ctx context.Context, method string, params any) (json.RawMessage, error) {
-	return c.Call(ctx, method, params)
+	// Ensure we're connected (only if not already mocked)
+	if c.clientWrapper == nil {
+		if err := c.connect(); err != nil {
+			return nil, err
+		}
+	}
+
+	// Build command with -j flag for job waiting
+	cmd := fmt.Sprintf("sudo midclt call -j %s", method)
+	paramsStr, err := serializeParams(params)
+	if err != nil {
+		return nil, err
+	}
+	cmd += paramsStr
+
+	// Create session
+	session, err := c.clientWrapper.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	defer session.Close()
+
+	// Execute command - use CombinedOutput to capture stderr for error messages
+	output, err := session.CombinedOutput(cmd)
+	if err != nil {
+		// Strip ANSI codes for cleaner error messages
+		cleaned := ansiRegex.ReplaceAll(output, nil)
+		if len(cleaned) > 0 {
+			return nil, fmt.Errorf("%w: %s", err, string(cleaned))
+		}
+		return nil, err
+	}
+
+	// Strip ANSI escape codes from output (from progress bars)
+	cleaned := ansiRegex.ReplaceAll(output, nil)
+
+	// The JSON result is typically on the last non-empty line after progress output
+	lines := bytes.Split(cleaned, []byte("\n"))
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := bytes.TrimSpace(lines[i])
+		if len(line) > 0 && (line[0] == '{' || line[0] == '[') {
+			return json.RawMessage(line), nil
+		}
+	}
+
+	// If no JSON found, return the cleaned output
+	return json.RawMessage(bytes.TrimSpace(cleaned)), nil
 }
 
 // Close closes the SSH connection.

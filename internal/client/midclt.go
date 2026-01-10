@@ -13,6 +13,8 @@ import (
 var methodRegex = regexp.MustCompile(`^[a-z][a-z0-9_.]+$`)
 
 // BuildCommand constructs a midclt command string.
+// If params is a []any slice, each element is passed as a separate positional argument.
+// This is needed for TrueNAS CRUD update methods which expect (id, data) as separate args.
 func BuildCommand(method string, params any) string {
 	// Validate method name to prevent command injection
 	if !methodRegex.MatchString(method) {
@@ -21,6 +23,19 @@ func BuildCommand(method string, params any) string {
 
 	if params == nil {
 		return fmt.Sprintf("midclt call %s", method)
+	}
+
+	// Handle []any slices specially - each element becomes a separate argument
+	if slice, ok := params.([]any); ok {
+		args := fmt.Sprintf("midclt call %s", method)
+		for _, arg := range slice {
+			argJSON, err := json.Marshal(arg)
+			if err != nil {
+				continue
+			}
+			args += " " + shellescape.Quote(string(argJSON))
+		}
+		return args
 	}
 
 	paramsJSON, err := json.Marshal(params)
@@ -33,38 +48,11 @@ func BuildCommand(method string, params any) string {
 }
 
 // AppCreateParams represents parameters for app.create.
+// Simplified for custom Docker Compose apps only.
 type AppCreateParams struct {
-	AppName                   string    `json:"app_name"`
-	CustomApp                 bool      `json:"custom_app"`
-	CustomComposeConfigString string    `json:"custom_compose_config_string,omitempty"`
-	Values                    AppValues `json:"values"`
-}
-
-// AppValues represents the values section of app configuration.
-type AppValues struct {
-	Storage map[string]StorageConfig `json:"storage,omitempty"`
-	Network map[string]NetworkConfig `json:"network,omitempty"`
-	Labels  []string                 `json:"labels,omitempty"`
-}
-
-// StorageConfig represents volume storage configuration.
-type StorageConfig struct {
-	Type           string         `json:"type"`
-	HostPathConfig HostPathConfig `json:"host_path_config"`
-}
-
-// HostPathConfig represents host path configuration.
-type HostPathConfig struct {
-	ACLEnable       bool   `json:"acl_enable"`
-	AutoPermissions bool   `json:"auto_permissions"`
-	Path            string `json:"path"`
-}
-
-// NetworkConfig represents network port configuration.
-type NetworkConfig struct {
-	BindMode   string   `json:"bind_mode"`
-	HostIPs    []string `json:"host_ips"`
-	PortNumber int      `json:"port_number"`
+	AppName                   string `json:"app_name"`
+	CustomApp                 bool   `json:"custom_app"`
+	CustomComposeConfigString string `json:"custom_compose_config_string,omitempty"`
 }
 
 // DatasetCreateParams represents parameters for pool.dataset.create.

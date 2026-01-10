@@ -108,12 +108,11 @@ func (d *PoolDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 		return
 	}
 
-	// Build filter params: [[["name", "=", "poolname"]]]
+	// Build filter params: [["name", "=", "poolname"]]
 	filters := [][]string{{"name", "=", data.Name.ValueString()}}
-	params := []any{filters}
 
 	// Call the TrueNAS API
-	result, err := d.client.Call(ctx, "pool.query", params)
+	result, err := d.client.Call(ctx, "pool.query", filters)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Read Pool",

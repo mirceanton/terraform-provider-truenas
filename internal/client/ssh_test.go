@@ -22,9 +22,10 @@ func (m *mockDialer) Dial(network, addr string, config *ssh.ClientConfig) (*ssh.
 
 // mockSession is a test double for sshSession.
 type mockSession struct {
-	runFunc    func(cmd string) error
-	outputFunc func(cmd string) ([]byte, error)
-	closeFunc  func() error
+	runFunc            func(cmd string) error
+	outputFunc         func(cmd string) ([]byte, error)
+	combinedOutputFunc func(cmd string) ([]byte, error)
+	closeFunc          func() error
 }
 
 func (m *mockSession) Run(cmd string) error {
@@ -37,6 +38,13 @@ func (m *mockSession) Run(cmd string) error {
 func (m *mockSession) Output(cmd string) ([]byte, error) {
 	if m.outputFunc != nil {
 		return m.outputFunc(cmd)
+	}
+	return nil, nil
+}
+
+func (m *mockSession) CombinedOutput(cmd string) ([]byte, error) {
+	if m.combinedOutputFunc != nil {
+		return m.combinedOutputFunc(cmd)
 	}
 	return nil, nil
 }
@@ -328,8 +336,8 @@ func TestSSHClient_Call_WithoutParams(t *testing.T) {
 	client, _ := NewSSHClient(config)
 
 	mockSess := &mockSession{
-		outputFunc: func(cmd string) ([]byte, error) {
-			expected := `midclt call system.info`
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
+			expected := `sudo midclt call system.info`
 			if cmd != expected {
 				t.Errorf("expected command %q, got %q", expected, cmd)
 			}
@@ -364,9 +372,9 @@ func TestSSHClient_Call_WithParams(t *testing.T) {
 	client, _ := NewSSHClient(config)
 
 	mockSess := &mockSession{
-		outputFunc: func(cmd string) ([]byte, error) {
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
 			// shellescape.Quote wraps the JSON in single quotes
-			expected := `midclt call app.query '[{"name":"test"}]'`
+			expected := `sudo midclt call app.query '[{"name":"test"}]'`
 			if cmd != expected {
 				t.Errorf("expected command %q, got %q", expected, cmd)
 			}
@@ -423,7 +431,7 @@ func TestSSHClient_Call_OutputError(t *testing.T) {
 	client, _ := NewSSHClient(config)
 
 	mockSess := &mockSession{
-		outputFunc: func(cmd string) ([]byte, error) {
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
 			return nil, errors.New("command failed")
 		},
 	}
@@ -504,7 +512,7 @@ func TestSSHClient_Call_ShellEscaping(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			var capturedCmd string
 			mockSess := &mockSession{
-				outputFunc: func(cmd string) ([]byte, error) {
+				combinedOutputFunc: func(cmd string) ([]byte, error) {
 					capturedCmd = cmd
 					return []byte(`{}`), nil
 				},
@@ -523,7 +531,7 @@ func TestSSHClient_Call_ShellEscaping(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			expectedPrefix := "midclt call test.method "
+			expectedPrefix := "sudo midclt call test.method "
 			if len(capturedCmd) <= len(expectedPrefix) {
 				t.Fatalf("command too short: %q", capturedCmd)
 			}
@@ -554,12 +562,13 @@ func TestSSHClient_CallAndWait(t *testing.T) {
 	client, _ := NewSSHClient(config)
 
 	mockSess := &mockSession{
-		outputFunc: func(cmd string) ([]byte, error) {
-			expected := `midclt call app.create '{"name":"test"}'`
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
+			// CallAndWait uses -j flag for job waiting
+			expected := `sudo midclt call -j app.create '{"name":"test"}'`
 			if cmd != expected {
 				t.Errorf("expected command %q, got %q", expected, cmd)
 			}
-			return []byte(`{"id": 123}`), nil
+			return []byte(`{"name": "test", "state": "RUNNING"}`), nil
 		},
 	}
 
@@ -576,8 +585,8 @@ func TestSSHClient_CallAndWait(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if string(result) != `{"id": 123}` {
-		t.Errorf("expected result {\"id\": 123}, got %s", result)
+	if string(result) != `{"name": "test", "state": "RUNNING"}` {
+		t.Errorf("expected result with app data, got %s", result)
 	}
 }
 
@@ -648,5 +657,113 @@ func TestSSHClient_Close_Error(t *testing.T) {
 	err := client.Close()
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestSerializeParams_Nil(t *testing.T) {
+	result, err := serializeParams(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != "" {
+		t.Errorf("expected empty string, got %q", result)
+	}
+}
+
+func TestSerializeParams_SingleValue(t *testing.T) {
+	result, err := serializeParams(map[string]string{"name": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := ` '{"name":"test"}'`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSerializeParams_Slice(t *testing.T) {
+	result, err := serializeParams([]any{"myapp", map[string]any{"key": "value"}})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	expected := ` '"myapp"' '{"key":"value"}'`
+	if result != expected {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestSerializeParams_SliceWithError(t *testing.T) {
+	// A channel cannot be marshaled to JSON
+	_, err := serializeParams([]any{make(chan int)})
+	if err == nil {
+		t.Fatal("expected error for unmarshallable type")
+	}
+}
+
+func TestSSHClient_Call_PositionalArgs(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	mockSess := &mockSession{
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
+			// []any slice should result in separate positional arguments
+			expected := `sudo midclt call app.update '"myapp"' '{"custom_compose_config_string":"services:\n  web:\n    image: nginx"}'`
+			if cmd != expected {
+				t.Errorf("expected command %q, got %q", expected, cmd)
+			}
+			return []byte(`{"name": "myapp"}`), nil
+		},
+	}
+
+	mockClient := &mockSSHClient{
+		newSessionFunc: func() (sshSession, error) {
+			return mockSess, nil
+		},
+	}
+
+	client.clientWrapper = mockClient
+
+	params := []any{"myapp", map[string]any{"custom_compose_config_string": "services:\n  web:\n    image: nginx"}}
+	_, err := client.Call(context.Background(), "app.update", params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestSSHClient_CallAndWait_PositionalArgs(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	mockSess := &mockSession{
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
+			// []any slice should result in separate positional arguments with -j flag
+			expected := `sudo midclt call -j app.update '"myapp"' '{"key":"value"}'`
+			if cmd != expected {
+				t.Errorf("expected command %q, got %q", expected, cmd)
+			}
+			return []byte(`{"name": "myapp"}`), nil
+		},
+	}
+
+	mockClient := &mockSSHClient{
+		newSessionFunc: func() (sshSession, error) {
+			return mockSess, nil
+		},
+	}
+
+	client.clientWrapper = mockClient
+
+	params := []any{"myapp", map[string]any{"key": "value"}}
+	_, err := client.CallAndWait(context.Background(), "app.update", params)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

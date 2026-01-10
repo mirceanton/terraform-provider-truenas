@@ -2,12 +2,14 @@
 #MISE description="Install to local Terraform plugins"
 set -euo pipefail
 
-go build -o terraform-provider-truenas
-
+VERSION="0.1.0"
 os=$(go env GOOS)
 arch=$(go env GOARCH)
-plugin_dir="$HOME/.terraform.d/plugins/local/truenas/truenas/0.1.0/${os}_${arch}"
+
+go build -o "terraform-provider-truenas_v${VERSION}"
+
+plugin_dir="$HOME/.terraform.d/plugins/registry.terraform.io/local/truenas/${VERSION}/${os}_${arch}"
 
 mkdir -p "$plugin_dir"
-cp terraform-provider-truenas "$plugin_dir/"
+cp "terraform-provider-truenas_v${VERSION}" "$plugin_dir/"
 echo "Installed to $plugin_dir"

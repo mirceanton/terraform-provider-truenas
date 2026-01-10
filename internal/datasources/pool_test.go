@@ -438,19 +438,10 @@ func TestPoolDataSource_Read_VerifyFilterParams(t *testing.T) {
 	}
 
 	// Verify the filter params were passed correctly
-	// Expected format: [[["name", "=", "mypool"]]]
-	paramsSlice, ok := capturedParams.([]any)
+	// Expected format: [["name", "=", "mypool"]]
+	filters, ok := capturedParams.([][]string)
 	if !ok {
-		t.Fatalf("expected params to be []any, got %T", capturedParams)
-	}
-
-	if len(paramsSlice) != 1 {
-		t.Fatalf("expected 1 param, got %d", len(paramsSlice))
-	}
-
-	filters, ok := paramsSlice[0].([][]string)
-	if !ok {
-		t.Fatalf("expected filters to be [][]string, got %T", paramsSlice[0])
+		t.Fatalf("expected params to be [][]string, got %T", capturedParams)
 	}
 
 	if len(filters) != 1 {
