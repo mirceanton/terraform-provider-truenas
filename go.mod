@@ -1,4 +1,4 @@
-module github.com/dsh/terraform-provider-truenas
+module github.com/deevus/terraform-provider-truenas
 
 go 1.25.5
 
