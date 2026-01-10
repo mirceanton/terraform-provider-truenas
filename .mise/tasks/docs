@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#MISE description="Generate provider documentation"
+#MISE depends=["build"]
+
+set -e
+
+# Ensure tfplugindocs is installed
+if ! command -v tfplugindocs &> /dev/null; then
+    echo "Installing tfplugindocs..."
+    go install github.com/hashicorp/terraform-plugin-docs/cmd/tfplugindocs@latest
+fi
+
+echo "Generating documentation..."
+tfplugindocs generate
+
+echo "Documentation generated in docs/"
