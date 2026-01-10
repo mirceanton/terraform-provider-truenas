@@ -1,6 +1,8 @@
 package client
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +66,65 @@ func TestTrueNASError_Error(t *testing.T) {
 
 	if errStr == "" {
 		t.Error("Error() should return non-empty string")
+	}
+}
+
+func TestNewConnectionError(t *testing.T) {
+	err := NewConnectionError("10.0.0.1", 22, fmt.Errorf("connection refused"))
+
+	if err.Code != "ECONNREFUSED" {
+		t.Errorf("expected code ECONNREFUSED, got %s", err.Code)
+	}
+	if err.Suggestion == "" {
+		t.Error("expected suggestion for connection error")
+	}
+	if !strings.Contains(err.Message, "10.0.0.1") {
+		t.Error("expected message to contain host")
+	}
+	if !strings.Contains(err.Message, "22") {
+		t.Error("expected message to contain port")
+	}
+}
+
+func TestNewTimeoutError(t *testing.T) {
+	err := NewTimeoutError(12345, "5m")
+
+	if err.Code != "ETIMEDOUT" {
+		t.Errorf("expected code ETIMEDOUT, got %s", err.Code)
+	}
+	if err.JobID != 12345 {
+		t.Errorf("expected JobID 12345, got %d", err.JobID)
+	}
+	if err.Suggestion == "" {
+		t.Error("expected suggestion for timeout error")
+	}
+	if !strings.Contains(err.Message, "5m") {
+		t.Error("expected message to contain duration")
+	}
+}
+
+func TestTrueNASError_Error_Format(t *testing.T) {
+	err := &TrueNASError{
+		Code:       "EINVAL",
+		Message:    "test message",
+		Suggestion: "try this",
+	}
+
+	errStr := err.Error()
+	expected := "test message\n\nSuggestion: try this"
+	if errStr != expected {
+		t.Errorf("expected %q, got %q", expected, errStr)
+	}
+}
+
+func TestTrueNASError_Error_NoSuggestion(t *testing.T) {
+	err := &TrueNASError{
+		Code:    "UNKNOWN",
+		Message: "simple message",
+	}
+
+	errStr := err.Error()
+	if errStr != "simple message" {
+		t.Errorf("expected %q, got %q", "simple message", errStr)
 	}
 }
