@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"regexp"
 	"sync"
 
@@ -286,4 +287,34 @@ func (c *SSHClient) Close() error {
 	c.client = nil
 	c.clientWrapper = nil
 	return err
+}
+
+// WriteFile writes content to a file on the remote system.
+// TODO: Implement SFTP file operations in Task 1.3
+func (c *SSHClient) WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode) error {
+	return errors.New("SFTP operations not yet implemented")
+}
+
+// ReadFile reads the content of a file from the remote system.
+// TODO: Implement SFTP file operations in Task 1.3
+func (c *SSHClient) ReadFile(ctx context.Context, path string) ([]byte, error) {
+	return nil, errors.New("SFTP operations not yet implemented")
+}
+
+// DeleteFile removes a file from the remote system.
+// TODO: Implement SFTP file operations in Task 1.3
+func (c *SSHClient) DeleteFile(ctx context.Context, path string) error {
+	return errors.New("SFTP operations not yet implemented")
+}
+
+// FileExists checks if a file exists on the remote system.
+// TODO: Implement SFTP file operations in Task 1.3
+func (c *SSHClient) FileExists(ctx context.Context, path string) (bool, error) {
+	return false, errors.New("SFTP operations not yet implemented")
+}
+
+// MkdirAll creates a directory and all parent directories.
+// TODO: Implement SFTP file operations in Task 1.3
+func (c *SSHClient) MkdirAll(ctx context.Context, path string, mode fs.FileMode) error {
+	return errors.New("SFTP operations not yet implemented")
 }

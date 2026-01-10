@@ -100,3 +100,16 @@ func TestMockClient_Close_NilFunc(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestMockClient_ImplementsSFTPMethods(t *testing.T) {
+	mock := &MockClient{}
+
+	// Verify SFTP methods exist on MockClient
+	ctx := context.Background()
+
+	_ = mock.WriteFile(ctx, "/test", []byte("content"), 0644)
+	_, _ = mock.ReadFile(ctx, "/test")
+	_ = mock.DeleteFile(ctx, "/test")
+	_, _ = mock.FileExists(ctx, "/test")
+	_ = mock.MkdirAll(ctx, "/test", 0755)
+}
