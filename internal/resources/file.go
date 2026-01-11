@@ -130,6 +130,13 @@ func (r *FileResource) ValidateConfig(ctx context.Context, req resource.Validate
 		return
 	}
 
+	// Skip validation if any path-related values are unknown (e.g., referencing
+	// another resource's output). Validation will occur at apply time when
+	// values are known.
+	if data.HostPath.IsUnknown() || data.RelativePath.IsUnknown() || data.Path.IsUnknown() {
+		return
+	}
+
 	hasHostPath := !data.HostPath.IsNull() && !data.HostPath.IsUnknown()
 	hasRelativePath := !data.RelativePath.IsNull() && !data.RelativePath.IsUnknown()
 	hasPath := !data.Path.IsNull() && !data.Path.IsUnknown()
@@ -289,7 +296,12 @@ func (r *FileResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
+	// Use path if set, otherwise fall back to ID (for import scenarios where
+	// only ID is populated by ImportStatePassthroughID)
 	fullPath := data.Path.ValueString()
+	if fullPath == "" {
+		fullPath = data.ID.ValueString()
+	}
 
 	// Check if file exists
 	exists, err := r.client.FileExists(ctx, fullPath)
@@ -317,7 +329,9 @@ func (r *FileResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		return
 	}
 
-	// Update checksum to reflect actual remote state
+	// Update computed values to reflect actual remote state
+	// This also ensures path is set after import (where only ID is populated)
+	data.Path = types.StringValue(fullPath)
 	data.Checksum = types.StringValue(computeChecksum(string(content)))
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
