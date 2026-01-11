@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -237,12 +238,18 @@ func (r *AppResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
+	// Debug: log the raw response
+	tflog.Debug(ctx, "app.update raw response", map[string]interface{}{
+		"response": string(result),
+		"app_name": appName,
+	})
+
 	// Parse the response
 	var appResp appAPIResponse
 	if err := json.Unmarshal(result, &appResp); err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Parse App Response",
-			fmt.Sprintf("Unable to parse app update response: %s", err.Error()),
+			fmt.Sprintf("Unable to parse app update response: %s\nRaw response: %s", err.Error(), string(result)),
 		)
 		return
 	}
