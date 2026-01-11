@@ -1,7 +1,7 @@
 terraform {
   required_providers {
     truenas = {
-      source  = "local/truenas"
+      source  = "deevus/truenas"
       version = "~> 0.1"
     }
   }
