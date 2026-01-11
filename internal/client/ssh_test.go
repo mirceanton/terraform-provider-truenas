@@ -568,7 +568,8 @@ func TestSSHClient_CallAndWait(t *testing.T) {
 			if cmd != expected {
 				t.Errorf("expected command %q, got %q", expected, cmd)
 			}
-			return []byte(`{"name": "test", "state": "RUNNING"}`), nil
+			// Response contains progress output - caller should query state separately
+			return []byte(`Progress: 100%\n{"name": "test", "state": "RUNNING"}`), nil
 		},
 	}
 
@@ -585,8 +586,9 @@ func TestSSHClient_CallAndWait(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if string(result) != `{"name": "test", "state": "RUNNING"}` {
-		t.Errorf("expected result with app data, got %s", result)
+	// CallAndWait returns nil on success - callers should query state separately
+	if result != nil {
+		t.Errorf("expected nil result, got %s", result)
 	}
 }
 

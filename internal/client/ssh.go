@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -279,6 +278,8 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 
 // CallAndWait executes a command and waits for job completion.
 // Uses midclt's -j flag to wait for long-running jobs.
+// Note: The response is not parsed as it contains unparseable progress output.
+// Callers should query the resource state separately after this returns.
 func (c *SSHClient) CallAndWait(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	// Ensure we're connected (only if not already mocked)
 	if c.clientWrapper == nil {
@@ -313,20 +314,8 @@ func (c *SSHClient) CallAndWait(ctx context.Context, method string, params any) 
 		return nil, err
 	}
 
-	// Strip ANSI escape codes from output (from progress bars)
-	cleaned := ansiRegex.ReplaceAll(output, nil)
-
-	// The JSON result is typically on the last non-empty line after progress output
-	lines := bytes.Split(cleaned, []byte("\n"))
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := bytes.TrimSpace(lines[i])
-		if len(line) > 0 && (line[0] == '{' || line[0] == '[') {
-			return json.RawMessage(line), nil
-		}
-	}
-
-	// If no JSON found, return the cleaned output
-	return json.RawMessage(bytes.TrimSpace(cleaned)), nil
+	// Success - return nil as callers should query state separately
+	return nil, nil
 }
 
 // Close closes the SSH connection.

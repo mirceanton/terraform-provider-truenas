@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
-	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -121,30 +120,51 @@ func (r *AppResource) Create(ctx context.Context, req resource.CreateRequest, re
 
 	// Build create params
 	params := r.buildCreateParams(ctx, &data)
+	appName := data.Name.ValueString()
 
 	// Call the TrueNAS API (app.create returns a job, use CallAndWait)
-	result, err := r.client.CallAndWait(ctx, "app.create", params)
+	// Ignore the response as it contains unparseable progress output mixed with JSON
+	_, err := r.client.CallAndWait(ctx, "app.create", params)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create App",
-			fmt.Sprintf("Unable to create app %q: %s", data.Name.ValueString(), err.Error()),
+			fmt.Sprintf("Unable to create app %q: %s", appName, err.Error()),
 		)
 		return
 	}
 
-	// Parse the response
-	var appResp appAPIResponse
-	if err := json.Unmarshal(result, &appResp); err != nil {
+	// Query the app to get current state
+	filter := [][]any{{"name", "=", appName}}
+	result, err := r.client.Call(ctx, "app.query", filter)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Query App After Create",
+			fmt.Sprintf("Unable to query app %q after create: %s", appName, err.Error()),
+		)
+		return
+	}
+
+	var apps []appAPIResponse
+	if err := json.Unmarshal(result, &apps); err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Parse App Response",
-			fmt.Sprintf("Unable to parse app create response: %s", err.Error()),
+			fmt.Sprintf("Unable to parse app query response: %s", err.Error()),
+		)
+		return
+	}
+
+	if len(apps) == 0 {
+		resp.Diagnostics.AddError(
+			"App Not Found After Create",
+			fmt.Sprintf("App %q was not found after create", appName),
 		)
 		return
 	}
 
 	// Map response to model
-	data.ID = types.StringValue(appResp.Name)
-	data.State = types.StringValue(appResp.State)
+	app := apps[0]
+	data.ID = types.StringValue(app.Name)
+	data.State = types.StringValue(app.State)
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -229,7 +249,9 @@ func (r *AppResource) Update(ctx context.Context, req resource.UpdateRequest, re
 	appName := data.Name.ValueString()
 	params := []any{appName, updateParams}
 
-	result, err := r.client.CallAndWait(ctx, "app.update", params)
+	// Call app.update and wait for completion - ignore the response as it contains
+	// unparseable progress output mixed with JSON
+	_, err := r.client.CallAndWait(ctx, "app.update", params)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Update App",
@@ -238,25 +260,38 @@ func (r *AppResource) Update(ctx context.Context, req resource.UpdateRequest, re
 		return
 	}
 
-	// Debug: log the raw response
-	tflog.Debug(ctx, "app.update raw response", map[string]interface{}{
-		"response": string(result),
-		"app_name": appName,
-	})
+	// Query the app to get current state
+	filter := [][]any{{"name", "=", appName}}
+	result, err := r.client.Call(ctx, "app.query", filter)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Query App After Update",
+			fmt.Sprintf("Unable to query app %q after update: %s", appName, err.Error()),
+		)
+		return
+	}
 
-	// Parse the response
-	var appResp appAPIResponse
-	if err := json.Unmarshal(result, &appResp); err != nil {
+	var apps []appAPIResponse
+	if err := json.Unmarshal(result, &apps); err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Parse App Response",
-			fmt.Sprintf("Unable to parse app update response: %s\nRaw response: %s", err.Error(), string(result)),
+			fmt.Sprintf("Unable to parse app query response: %s", err.Error()),
+		)
+		return
+	}
+
+	if len(apps) == 0 {
+		resp.Diagnostics.AddError(
+			"App Not Found After Update",
+			fmt.Sprintf("App %q was not found after update", appName),
 		)
 		return
 	}
 
 	// Map response to model
-	data.ID = types.StringValue(appResp.Name)
-	data.State = types.StringValue(appResp.State)
+	app := apps[0]
+	data.ID = types.StringValue(app.Name)
+	data.State = types.StringValue(app.State)
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

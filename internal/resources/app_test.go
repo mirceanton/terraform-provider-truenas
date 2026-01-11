@@ -181,18 +181,23 @@ func createAppResourceModelValue(
 }
 
 func TestAppResource_Create_Success(t *testing.T) {
-	var capturedMethod string
-	var capturedParams any
+	var capturedCreateMethod string
+	var capturedCreateParams any
 
 	r := &AppResource{
 		client: &client.MockClient{
 			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				capturedMethod = method
-				capturedParams = params
-				return json.RawMessage(`{
+				capturedCreateMethod = method
+				capturedCreateParams = params
+				// app.create response is ignored
+				return nil, nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				// Return app.query response
+				return json.RawMessage(`[{
 					"name": "myapp",
 					"state": "RUNNING"
-				}`), nil
+				}]`), nil
 			},
 		},
 	}
@@ -221,14 +226,14 @@ func TestAppResource_Create_Success(t *testing.T) {
 	}
 
 	// Verify app.create was called
-	if capturedMethod != "app.create" {
-		t.Errorf("expected method 'app.create', got %q", capturedMethod)
+	if capturedCreateMethod != "app.create" {
+		t.Errorf("expected method 'app.create', got %q", capturedCreateMethod)
 	}
 
 	// Verify params include app_name
-	params, ok := capturedParams.(client.AppCreateParams)
+	params, ok := capturedCreateParams.(client.AppCreateParams)
 	if !ok {
-		t.Fatalf("expected params to be AppCreateParams, got %T", capturedParams)
+		t.Fatalf("expected params to be AppCreateParams, got %T", capturedCreateParams)
 	}
 
 	if params.AppName != "myapp" {
@@ -262,10 +267,15 @@ func TestAppResource_Create_WithComposeConfig(t *testing.T) {
 		client: &client.MockClient{
 			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				capturedParams = params
-				return json.RawMessage(`{
+				// app.create response is ignored
+				return nil, nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				// Return app.query response
+				return json.RawMessage(`[{
 					"name": "myapp",
 					"state": "RUNNING"
-				}`), nil
+				}]`), nil
 			},
 		},
 	}
@@ -478,18 +488,25 @@ func TestAppResource_Read_APIError(t *testing.T) {
 }
 
 func TestAppResource_Update_Success(t *testing.T) {
-	var capturedMethod string
-	var capturedParams any
+	var capturedUpdateMethod string
+	var capturedUpdateParams any
+	var capturedQueryMethod string
 
 	r := &AppResource{
 		client: &client.MockClient{
 			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				capturedMethod = method
-				capturedParams = params
-				return json.RawMessage(`{
+				capturedUpdateMethod = method
+				capturedUpdateParams = params
+				// app.update response is ignored, just return empty
+				return json.RawMessage(`{}`), nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				capturedQueryMethod = method
+				// Return app.query response (array of apps)
+				return json.RawMessage(`[{
 					"name": "myapp",
 					"state": "RUNNING"
-				}`), nil
+				}]`), nil
 			},
 		},
 	}
@@ -527,14 +544,19 @@ func TestAppResource_Update_Success(t *testing.T) {
 	}
 
 	// Verify app.update was called
-	if capturedMethod != "app.update" {
-		t.Errorf("expected method 'app.update', got %q", capturedMethod)
+	if capturedUpdateMethod != "app.update" {
+		t.Errorf("expected method 'app.update', got %q", capturedUpdateMethod)
+	}
+
+	// Verify app.query was called to get state after update
+	if capturedQueryMethod != "app.query" {
+		t.Errorf("expected query method 'app.query', got %q", capturedQueryMethod)
 	}
 
 	// Verify params is an array [name, updateParams]
-	paramsSlice, ok := capturedParams.([]any)
+	paramsSlice, ok := capturedUpdateParams.([]any)
 	if !ok {
-		t.Fatalf("expected params to be []any, got %T", capturedParams)
+		t.Fatalf("expected params to be []any, got %T", capturedUpdateParams)
 	}
 
 	if len(paramsSlice) < 2 {
