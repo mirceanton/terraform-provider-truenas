@@ -289,6 +289,56 @@ func TestFileResource_ValidateConfig_HostPathWithoutRelativePath(t *testing.T) {
 	}
 }
 
+// Configure tests
+
+func TestFileResource_Configure_Success(t *testing.T) {
+	r := NewFileResource().(*FileResource)
+
+	mockClient := &client.MockClient{}
+
+	req := resource.ConfigureRequest{
+		ProviderData: mockClient,
+	}
+	resp := &resource.ConfigureResponse{}
+
+	r.Configure(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+}
+
+func TestFileResource_Configure_NilProviderData(t *testing.T) {
+	r := NewFileResource().(*FileResource)
+
+	req := resource.ConfigureRequest{
+		ProviderData: nil,
+	}
+	resp := &resource.ConfigureResponse{}
+
+	r.Configure(context.Background(), req, resp)
+
+	// Should not error - nil ProviderData is valid during schema validation
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+}
+
+func TestFileResource_Configure_WrongType(t *testing.T) {
+	r := NewFileResource().(*FileResource)
+
+	req := resource.ConfigureRequest{
+		ProviderData: "not a client",
+	}
+	resp := &resource.ConfigureResponse{}
+
+	r.Configure(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for wrong ProviderData type")
+	}
+}
+
 // Helper functions
 
 func getFileResourceSchema(t *testing.T) resource.SchemaResponse {
@@ -1019,6 +1069,77 @@ func newNumberOrUnknown(v interface{}) tftypes.Value {
 // and Terraform marks them as unknown during planning.
 // Bug: Without this fix, Terraform errors with "provider still indicated an unknown
 // value for truenas_file.*.mode/uid/gid. All values must be known after apply."
+func TestFileResource_ImportState(t *testing.T) {
+	r := NewFileResource().(*FileResource)
+
+	schemaResp := getFileResourceSchema(t)
+
+	// Create an initial empty state with the correct schema
+	emptyState := createFileResourceModel(nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	req := resource.ImportStateRequest{
+		ID: "/mnt/storage/imported/file.txt",
+	}
+
+	resp := &resource.ImportStateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    emptyState,
+		},
+	}
+
+	r.ImportState(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify state has id set to the import ID
+	var model FileResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+
+	if model.ID.ValueString() != "/mnt/storage/imported/file.txt" {
+		t.Errorf("expected ID '/mnt/storage/imported/file.txt', got %q", model.ID.ValueString())
+	}
+}
+
+func TestFileResource_Create_MkdirError(t *testing.T) {
+	r := &FileResource{
+		client: &client.MockClient{
+			MkdirAllFunc: func(ctx context.Context, path string, mode fs.FileMode) error {
+				return errors.New("permission denied")
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	// Using host_path + relative_path triggers MkdirAll
+	planValue := createFileResourceModel(nil, "/mnt/storage/apps/myapp", "config/app.conf", nil, "content", "0644", 0, 0, nil)
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for MkdirAll failure")
+	}
+}
+
 func TestFileResource_Update_SetsDefaultsForUnknownComputedAttributes(t *testing.T) {
 	r := &FileResource{
 		client: &client.MockClient{
