@@ -3,6 +3,7 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"io/fs"
 	"testing"
 )
 
@@ -101,15 +102,150 @@ func TestMockClient_Close_NilFunc(t *testing.T) {
 	}
 }
 
-func TestMockClient_ImplementsSFTPMethods(t *testing.T) {
+func TestMockClient_WriteFile_NilFunc(t *testing.T) {
 	mock := &MockClient{}
-
-	// Verify SFTP methods exist on MockClient
 	ctx := context.Background()
 
-	_ = mock.WriteFile(ctx, "/test", []byte("content"), 0644)
-	_, _ = mock.ReadFile(ctx, "/test")
-	_ = mock.DeleteFile(ctx, "/test")
-	_, _ = mock.FileExists(ctx, "/test")
-	_ = mock.MkdirAll(ctx, "/test", 0755)
+	err := mock.WriteFile(ctx, "/test", []byte("content"), 0644)
+	if err != nil {
+		t.Errorf("expected nil error for nil WriteFileFunc, got %v", err)
+	}
+}
+
+func TestMockClient_WriteFile_WithFunc(t *testing.T) {
+	called := false
+	mock := &MockClient{
+		WriteFileFunc: func(ctx context.Context, path string, content []byte, mode fs.FileMode) error {
+			called = true
+			return nil
+		},
+	}
+	ctx := context.Background()
+
+	err := mock.WriteFile(ctx, "/test", []byte("content"), 0644)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected WriteFileFunc to be called")
+	}
+}
+
+func TestMockClient_ReadFile_NilFunc(t *testing.T) {
+	mock := &MockClient{}
+	ctx := context.Background()
+
+	result, err := mock.ReadFile(ctx, "/test")
+	if err != nil {
+		t.Errorf("expected nil error for nil ReadFileFunc, got %v", err)
+	}
+	if result != nil {
+		t.Errorf("expected nil result for nil ReadFileFunc, got %v", result)
+	}
+}
+
+func TestMockClient_ReadFile_WithFunc(t *testing.T) {
+	expected := []byte("file content")
+	mock := &MockClient{
+		ReadFileFunc: func(ctx context.Context, path string) ([]byte, error) {
+			return expected, nil
+		},
+	}
+	ctx := context.Background()
+
+	result, err := mock.ReadFile(ctx, "/test")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if string(result) != string(expected) {
+		t.Errorf("expected %q, got %q", expected, result)
+	}
+}
+
+func TestMockClient_DeleteFile_NilFunc(t *testing.T) {
+	mock := &MockClient{}
+	ctx := context.Background()
+
+	err := mock.DeleteFile(ctx, "/test")
+	if err != nil {
+		t.Errorf("expected nil error for nil DeleteFileFunc, got %v", err)
+	}
+}
+
+func TestMockClient_DeleteFile_WithFunc(t *testing.T) {
+	called := false
+	mock := &MockClient{
+		DeleteFileFunc: func(ctx context.Context, path string) error {
+			called = true
+			return nil
+		},
+	}
+	ctx := context.Background()
+
+	err := mock.DeleteFile(ctx, "/test")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected DeleteFileFunc to be called")
+	}
+}
+
+func TestMockClient_FileExists_NilFunc(t *testing.T) {
+	mock := &MockClient{}
+	ctx := context.Background()
+
+	exists, err := mock.FileExists(ctx, "/test")
+	if err != nil {
+		t.Errorf("expected nil error for nil FileExistsFunc, got %v", err)
+	}
+	if exists {
+		t.Error("expected false for nil FileExistsFunc")
+	}
+}
+
+func TestMockClient_FileExists_WithFunc(t *testing.T) {
+	mock := &MockClient{
+		FileExistsFunc: func(ctx context.Context, path string) (bool, error) {
+			return true, nil
+		},
+	}
+	ctx := context.Background()
+
+	exists, err := mock.FileExists(ctx, "/test")
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !exists {
+		t.Error("expected true from FileExistsFunc")
+	}
+}
+
+func TestMockClient_MkdirAll_NilFunc(t *testing.T) {
+	mock := &MockClient{}
+	ctx := context.Background()
+
+	err := mock.MkdirAll(ctx, "/test", 0755)
+	if err != nil {
+		t.Errorf("expected nil error for nil MkdirAllFunc, got %v", err)
+	}
+}
+
+func TestMockClient_MkdirAll_WithFunc(t *testing.T) {
+	called := false
+	mock := &MockClient{
+		MkdirAllFunc: func(ctx context.Context, path string, mode fs.FileMode) error {
+			called = true
+			return nil
+		},
+	}
+	ctx := context.Background()
+
+	err := mock.MkdirAll(ctx, "/test", 0755)
+	if err != nil {
+		t.Errorf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Error("expected MkdirAllFunc to be called")
+	}
 }
