@@ -102,8 +102,10 @@ type sftpClient interface {
 	Stat(path string) (fs.FileInfo, error)
 	Remove(path string) error
 	RemoveDirectory(path string) error
+	RemoveAll(path string) error
 	Open(path string) (sftpFile, error)
 	Chmod(path string, mode fs.FileMode) error
+	Chown(path string, uid, gid int) error
 	Close() error
 }
 
@@ -139,12 +141,20 @@ func (r *realSFTPClient) RemoveDirectory(path string) error {
 	return r.client.RemoveDirectory(path)
 }
 
+func (r *realSFTPClient) RemoveAll(path string) error {
+	return r.client.RemoveAll(path)
+}
+
 func (r *realSFTPClient) Open(path string) (sftpFile, error) {
 	return r.client.Open(path)
 }
 
 func (r *realSFTPClient) Chmod(path string, mode fs.FileMode) error {
 	return r.client.Chmod(path, mode)
+}
+
+func (r *realSFTPClient) Chown(path string, uid, gid int) error {
+	return r.client.Chown(path, uid, gid)
 }
 
 func (r *realSFTPClient) Close() error {
@@ -494,6 +504,38 @@ func (c *SSHClient) MkdirAll(ctx context.Context, path string, mode fs.FileMode)
 	// Apply the requested permissions
 	if err := c.sftpClient.Chmod(path, mode); err != nil {
 		return fmt.Errorf("failed to set permissions on directory %q: %w", path, err)
+	}
+
+	return nil
+}
+
+// RemoveAll recursively removes a directory and all its contents.
+func (c *SSHClient) RemoveAll(ctx context.Context, path string) error {
+	// Connect SFTP if needed (skip if already mocked)
+	if c.sftpClient == nil {
+		if err := c.connectSFTP(); err != nil {
+			return err
+		}
+	}
+
+	if err := c.sftpClient.RemoveAll(path); err != nil {
+		return fmt.Errorf("failed to remove directory %q: %w", path, err)
+	}
+
+	return nil
+}
+
+// Chown changes the ownership of a file or directory.
+func (c *SSHClient) Chown(ctx context.Context, path string, uid, gid int) error {
+	// Connect SFTP if needed (skip if already mocked)
+	if c.sftpClient == nil {
+		if err := c.connectSFTP(); err != nil {
+			return err
+		}
+	}
+
+	if err := c.sftpClient.Chown(path, uid, gid); err != nil {
+		return fmt.Errorf("failed to change ownership of %q: %w", path, err)
 	}
 
 	return nil

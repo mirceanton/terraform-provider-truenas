@@ -17,8 +17,10 @@ type mockSFTPClient struct {
 	statFunc      func(path string) (fs.FileInfo, error)
 	removeFunc    func(path string) error
 	removeDirFunc func(path string) error
+	removeAllFunc func(path string) error
 	openFunc      func(path string) (sftpFile, error)
 	chmodFunc     func(path string, mode fs.FileMode) error
+	chownFunc     func(path string, uid, gid int) error
 	closeFunc     func() error
 }
 
@@ -57,6 +59,13 @@ func (m *mockSFTPClient) RemoveDirectory(path string) error {
 	return nil
 }
 
+func (m *mockSFTPClient) RemoveAll(path string) error {
+	if m.removeAllFunc != nil {
+		return m.removeAllFunc(path)
+	}
+	return nil
+}
+
 func (m *mockSFTPClient) Open(path string) (sftpFile, error) {
 	if m.openFunc != nil {
 		return m.openFunc(path)
@@ -67,6 +76,13 @@ func (m *mockSFTPClient) Open(path string) (sftpFile, error) {
 func (m *mockSFTPClient) Chmod(path string, mode fs.FileMode) error {
 	if m.chmodFunc != nil {
 		return m.chmodFunc(path, mode)
+	}
+	return nil
+}
+
+func (m *mockSFTPClient) Chown(path string, uid, gid int) error {
+	if m.chownFunc != nil {
+		return m.chownFunc(path, uid, gid)
 	}
 	return nil
 }
@@ -620,5 +636,112 @@ func TestSSHClient_RemoveDir_NotFound(t *testing.T) {
 	err := client.RemoveDir(context.Background(), "/mnt/storage/missing")
 	if err == nil {
 		t.Fatal("expected error for missing directory")
+	}
+}
+
+func TestSSHClient_RemoveAll_Success(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	var removedPath string
+	mockSFTP := &mockSFTPClient{
+		removeAllFunc: func(path string) error {
+			removedPath = path
+			return nil
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	err := client.RemoveAll(context.Background(), "/mnt/storage/apps/myapp")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if removedPath != "/mnt/storage/apps/myapp" {
+		t.Errorf("expected path '/mnt/storage/apps/myapp', got %q", removedPath)
+	}
+}
+
+func TestSSHClient_RemoveAll_PermissionDenied(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	mockSFTP := &mockSFTPClient{
+		removeAllFunc: func(path string) error {
+			return errors.New("permission denied")
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	err := client.RemoveAll(context.Background(), "/mnt/storage/protected")
+	if err == nil {
+		t.Fatal("expected error for permission denied")
+	}
+}
+
+func TestSSHClient_Chown_Success(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	var chownPath string
+	var chownUID, chownGID int
+	mockSFTP := &mockSFTPClient{
+		chownFunc: func(path string, uid, gid int) error {
+			chownPath = path
+			chownUID = uid
+			chownGID = gid
+			return nil
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	err := client.Chown(context.Background(), "/mnt/storage/apps/config.yaml", 0, 0)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if chownPath != "/mnt/storage/apps/config.yaml" {
+		t.Errorf("expected path '/mnt/storage/apps/config.yaml', got %q", chownPath)
+	}
+
+	if chownUID != 0 || chownGID != 0 {
+		t.Errorf("expected uid=0 gid=0, got uid=%d gid=%d", chownUID, chownGID)
+	}
+}
+
+func TestSSHClient_Chown_PermissionDenied(t *testing.T) {
+	config := &SSHConfig{
+		Host:       "truenas.local",
+		PrivateKey: testPrivateKey,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	mockSFTP := &mockSFTPClient{
+		chownFunc: func(path string, uid, gid int) error {
+			return errors.New("operation not permitted")
+		},
+	}
+
+	client.sftpClient = mockSFTP
+
+	err := client.Chown(context.Background(), "/mnt/storage/protected.txt", 1000, 1000)
+	if err == nil {
+		t.Fatal("expected error for permission denied")
 	}
 }

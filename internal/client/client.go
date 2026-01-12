@@ -26,8 +26,14 @@ type Client interface {
 	// RemoveDir removes an empty directory from the remote system.
 	RemoveDir(ctx context.Context, path string) error
 
+	// RemoveAll recursively removes a directory and all its contents.
+	RemoveAll(ctx context.Context, path string) error
+
 	// FileExists checks if a file exists on the remote system.
 	FileExists(ctx context.Context, path string) (bool, error)
+
+	// Chown changes the ownership of a file or directory.
+	Chown(ctx context.Context, path string, uid, gid int) error
 
 	// MkdirAll creates a directory and all parent directories.
 	MkdirAll(ctx context.Context, path string, mode fs.FileMode) error
@@ -44,7 +50,9 @@ type MockClient struct {
 	ReadFileFunc    func(ctx context.Context, path string) ([]byte, error)
 	DeleteFileFunc  func(ctx context.Context, path string) error
 	RemoveDirFunc   func(ctx context.Context, path string) error
+	RemoveAllFunc   func(ctx context.Context, path string) error
 	FileExistsFunc  func(ctx context.Context, path string) (bool, error)
+	ChownFunc       func(ctx context.Context, path string, uid, gid int) error
 	MkdirAllFunc    func(ctx context.Context, path string, mode fs.FileMode) error
 	CloseFunc       func() error
 }
@@ -91,11 +99,25 @@ func (m *MockClient) RemoveDir(ctx context.Context, path string) error {
 	return nil
 }
 
+func (m *MockClient) RemoveAll(ctx context.Context, path string) error {
+	if m.RemoveAllFunc != nil {
+		return m.RemoveAllFunc(ctx, path)
+	}
+	return nil
+}
+
 func (m *MockClient) FileExists(ctx context.Context, path string) (bool, error) {
 	if m.FileExistsFunc != nil {
 		return m.FileExistsFunc(ctx, path)
 	}
 	return false, nil
+}
+
+func (m *MockClient) Chown(ctx context.Context, path string, uid, gid int) error {
+	if m.ChownFunc != nil {
+		return m.ChownFunc(ctx, path, uid, gid)
+	}
+	return nil
 }
 
 func (m *MockClient) MkdirAll(ctx context.Context, path string, mode fs.FileMode) error {
