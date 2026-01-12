@@ -40,6 +40,7 @@ type FileResourceModel struct {
 	UID          types.Int64  `tfsdk:"uid"`
 	GID          types.Int64  `tfsdk:"gid"`
 	Checksum     types.String `tfsdk:"checksum"`
+	ForceDestroy types.Bool   `tfsdk:"force_destroy"`
 }
 
 // NewFileResource creates a new FileResource.
@@ -101,6 +102,10 @@ func (r *FileResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 			"checksum": schema.StringAttribute{
 				Description: "SHA256 checksum of the file content.",
 				Computed:    true,
+			},
+			"force_destroy": schema.BoolAttribute{
+				Description: "Change file ownership to root before deletion to handle permission issues from app containers.",
+				Optional:    true,
 			},
 		},
 	}
@@ -386,6 +391,13 @@ func (r *FileResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	}
 
 	fullPath := data.Path.ValueString()
+
+	// If force_destroy is true, change ownership to root before deleting
+	// This handles permission issues from app containers that may have modified the file
+	if data.ForceDestroy.ValueBool() {
+		// Best effort - continue even if chown fails (file might already be deletable)
+		_ = r.client.Chown(ctx, fullPath, 0, 0)
+	}
 
 	if err := r.client.DeleteFile(ctx, fullPath); err != nil {
 		resp.Diagnostics.AddError(

@@ -351,6 +351,10 @@ func getFileResourceSchema(t *testing.T) resource.SchemaResponse {
 }
 
 func createFileResourceModel(id, hostPath, relativePath, path, content, mode, uid, gid, checksum interface{}) tftypes.Value {
+	return createFileResourceModelWithForceDestroy(id, hostPath, relativePath, path, content, mode, uid, gid, checksum, nil)
+}
+
+func createFileResourceModelWithForceDestroy(id, hostPath, relativePath, path, content, mode, uid, gid, checksum, forceDestroy interface{}) tftypes.Value {
 	return tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
 			"id":            tftypes.String,
@@ -362,6 +366,7 @@ func createFileResourceModel(id, hostPath, relativePath, path, content, mode, ui
 			"uid":           tftypes.Number,
 			"gid":           tftypes.Number,
 			"checksum":      tftypes.String,
+			"force_destroy": tftypes.Bool,
 		},
 	}, map[string]tftypes.Value{
 		"id":            tftypes.NewValue(tftypes.String, id),
@@ -373,6 +378,7 @@ func createFileResourceModel(id, hostPath, relativePath, path, content, mode, ui
 		"uid":           tftypes.NewValue(tftypes.Number, uid),
 		"gid":           tftypes.NewValue(tftypes.Number, gid),
 		"checksum":      tftypes.NewValue(tftypes.String, checksum),
+		"force_destroy": tftypes.NewValue(tftypes.Bool, forceDestroy),
 	})
 }
 
@@ -1035,6 +1041,7 @@ func createFileResourceModelWithUnknown(id, hostPath, relativePath, path, conten
 			"uid":           tftypes.Number,
 			"gid":           tftypes.Number,
 			"checksum":      tftypes.String,
+			"force_destroy": tftypes.Bool,
 		},
 	}, map[string]tftypes.Value{
 		"id":            newStringOrUnknown(id),
@@ -1046,6 +1053,7 @@ func createFileResourceModelWithUnknown(id, hostPath, relativePath, path, conten
 		"uid":           newNumberOrUnknown(uid),
 		"gid":           newNumberOrUnknown(gid),
 		"checksum":      newStringOrUnknown(checksum),
+		"force_destroy": tftypes.NewValue(tftypes.Bool, nil),
 	})
 }
 
@@ -1229,5 +1237,304 @@ func TestFileResource_Update_SetsDefaultsForUnknownComputedAttributes(t *testing
 	}
 	if model.GID.ValueInt64() != 0 {
 		t.Errorf("expected gid 0, got %d", model.GID.ValueInt64())
+	}
+}
+
+// Test Schema includes force_destroy attribute
+func TestFileResource_Schema_ForceDestroy(t *testing.T) {
+	r := NewFileResource()
+
+	req := resource.SchemaRequest{}
+	resp := &resource.SchemaResponse{}
+
+	r.Schema(context.Background(), req, resp)
+
+	// Verify force_destroy attribute exists and is optional
+	forceDestroyAttr, ok := resp.Schema.Attributes["force_destroy"]
+	if !ok {
+		t.Fatal("expected 'force_destroy' attribute in schema")
+	}
+	if !forceDestroyAttr.IsOptional() {
+		t.Error("expected 'force_destroy' attribute to be optional")
+	}
+}
+
+// Test Delete with force_destroy=true uses Chown before DeleteFile
+func TestFileResource_Delete_ForceDestroy(t *testing.T) {
+	var chownCalled bool
+	var chownPath string
+	var chownUID, chownGID int
+	var deleteFileCalled bool
+	var deletedPath string
+
+	r := &FileResource{
+		client: &client.MockClient{
+			ChownFunc: func(ctx context.Context, path string, uid, gid int) error {
+				chownCalled = true
+				chownPath = path
+				chownUID = uid
+				chownGID = gid
+				return nil
+			},
+			DeleteFileFunc: func(ctx context.Context, path string) error {
+				deleteFileCalled = true
+				deletedPath = path
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	// State with force_destroy = true
+	stateValue := createFileResourceModelWithForceDestroy(
+		"/mnt/storage/apps/myapp/config.yaml",
+		"/mnt/storage/apps/myapp",
+		"config.yaml",
+		"/mnt/storage/apps/myapp/config.yaml",
+		"content",
+		"0644",
+		1000,
+		1000,
+		"abc123",
+		true,
+	)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Chown should be called when force_destroy is true
+	if !chownCalled {
+		t.Error("expected Chown to be called when force_destroy is true")
+	}
+
+	if chownPath != "/mnt/storage/apps/myapp/config.yaml" {
+		t.Errorf("expected chown path '/mnt/storage/apps/myapp/config.yaml', got %q", chownPath)
+	}
+
+	// Should change ownership to root (0, 0)
+	if chownUID != 0 || chownGID != 0 {
+		t.Errorf("expected chown uid=0 gid=0, got uid=%d gid=%d", chownUID, chownGID)
+	}
+
+	// DeleteFile should also be called
+	if !deleteFileCalled {
+		t.Error("expected DeleteFile to be called")
+	}
+
+	if deletedPath != "/mnt/storage/apps/myapp/config.yaml" {
+		t.Errorf("expected deleted path '/mnt/storage/apps/myapp/config.yaml', got %q", deletedPath)
+	}
+}
+
+// Test Delete with force_destroy=false does not call Chown
+func TestFileResource_Delete_NoForceDestroy(t *testing.T) {
+	var chownCalled bool
+	var deleteFileCalled bool
+	var deletedPath string
+
+	r := &FileResource{
+		client: &client.MockClient{
+			ChownFunc: func(ctx context.Context, path string, uid, gid int) error {
+				chownCalled = true
+				return nil
+			},
+			DeleteFileFunc: func(ctx context.Context, path string) error {
+				deleteFileCalled = true
+				deletedPath = path
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	// State with force_destroy = false
+	stateValue := createFileResourceModelWithForceDestroy(
+		"/mnt/storage/apps/myapp/config.yaml",
+		"/mnt/storage/apps/myapp",
+		"config.yaml",
+		"/mnt/storage/apps/myapp/config.yaml",
+		"content",
+		"0644",
+		1000,
+		1000,
+		"abc123",
+		false,
+	)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Chown should NOT be called when force_destroy is false
+	if chownCalled {
+		t.Error("expected Chown NOT to be called when force_destroy is false")
+	}
+
+	// DeleteFile should still be called
+	if !deleteFileCalled {
+		t.Error("expected DeleteFile to be called")
+	}
+
+	if deletedPath != "/mnt/storage/apps/myapp/config.yaml" {
+		t.Errorf("expected deleted path '/mnt/storage/apps/myapp/config.yaml', got %q", deletedPath)
+	}
+}
+
+// Test Delete with force_destroy unset (nil) does not call Chown (default behavior)
+func TestFileResource_Delete_ForceDestroyNil(t *testing.T) {
+	var chownCalled bool
+	var deleteFileCalled bool
+	var deletedPath string
+
+	r := &FileResource{
+		client: &client.MockClient{
+			ChownFunc: func(ctx context.Context, path string, uid, gid int) error {
+				chownCalled = true
+				return nil
+			},
+			DeleteFileFunc: func(ctx context.Context, path string) error {
+				deleteFileCalled = true
+				deletedPath = path
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	// State with force_destroy = nil (not set) - uses the original helper
+	stateValue := createFileResourceModel(
+		"/mnt/storage/apps/myapp/config.yaml",
+		"/mnt/storage/apps/myapp",
+		"config.yaml",
+		"/mnt/storage/apps/myapp/config.yaml",
+		"content",
+		"0644",
+		1000,
+		1000,
+		"abc123",
+	)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Chown should NOT be called when force_destroy is nil (default)
+	if chownCalled {
+		t.Error("expected Chown NOT to be called when force_destroy is nil")
+	}
+
+	// DeleteFile should still be called
+	if !deleteFileCalled {
+		t.Error("expected DeleteFile to be called")
+	}
+
+	if deletedPath != "/mnt/storage/apps/myapp/config.yaml" {
+		t.Errorf("expected deleted path '/mnt/storage/apps/myapp/config.yaml', got %q", deletedPath)
+	}
+}
+
+// Test Delete with force_destroy=true continues even if Chown fails (warning only)
+func TestFileResource_Delete_ForceDestroy_ChownFailsContinues(t *testing.T) {
+	var deleteFileCalled bool
+
+	r := &FileResource{
+		client: &client.MockClient{
+			ChownFunc: func(ctx context.Context, path string, uid, gid int) error {
+				return errors.New("operation not permitted")
+			},
+			DeleteFileFunc: func(ctx context.Context, path string) error {
+				deleteFileCalled = true
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getFileResourceSchema(t)
+
+	stateValue := createFileResourceModelWithForceDestroy(
+		"/mnt/storage/apps/myapp/config.yaml",
+		"/mnt/storage/apps/myapp",
+		"config.yaml",
+		"/mnt/storage/apps/myapp/config.yaml",
+		"content",
+		"0644",
+		1000,
+		1000,
+		"abc123",
+		true,
+	)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	// Should NOT have error - Chown failure is just a warning, deletion continues
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("expected no errors (Chown failure should be warning only): %v", resp.Diagnostics)
+	}
+
+	// DeleteFile should still be called even if Chown fails
+	if !deleteFileCalled {
+		t.Error("expected DeleteFile to be called even when Chown fails")
 	}
 }
