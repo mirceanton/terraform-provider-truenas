@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sync"
 
@@ -106,6 +107,7 @@ type sftpClient interface {
 	Open(path string) (sftpFile, error)
 	Chmod(path string, mode fs.FileMode) error
 	Chown(path string, uid, gid int) error
+	ReadDir(path string) ([]fs.FileInfo, error)
 	Close() error
 }
 
@@ -155,6 +157,10 @@ func (r *realSFTPClient) Chmod(path string, mode fs.FileMode) error {
 
 func (r *realSFTPClient) Chown(path string, uid, gid int) error {
 	return r.client.Chown(path, uid, gid)
+}
+
+func (r *realSFTPClient) ReadDir(path string) ([]fs.FileInfo, error) {
+	return r.client.ReadDir(path)
 }
 
 func (r *realSFTPClient) Close() error {
@@ -536,6 +542,48 @@ func (c *SSHClient) Chown(ctx context.Context, path string, uid, gid int) error 
 
 	if err := c.sftpClient.Chown(path, uid, gid); err != nil {
 		return fmt.Errorf("failed to change ownership of %q: %w", path, err)
+	}
+
+	return nil
+}
+
+// ChmodRecursive recursively changes permissions on a directory and all contents.
+func (c *SSHClient) ChmodRecursive(ctx context.Context, path string, mode fs.FileMode) error {
+	// Connect SFTP if needed (skip if already mocked)
+	if c.sftpClient == nil {
+		if err := c.connectSFTP(); err != nil {
+			return err
+		}
+	}
+
+	return c.chmodRecursiveInternal(path, mode)
+}
+
+// chmodRecursiveInternal is the recursive implementation of ChmodRecursive.
+func (c *SSHClient) chmodRecursiveInternal(path string, mode fs.FileMode) error {
+	info, err := c.sftpClient.Stat(path)
+	if err != nil {
+		return fmt.Errorf("failed to stat %q: %w", path, err)
+	}
+
+	// If it's a directory, recurse into children first
+	if info.IsDir() {
+		entries, err := c.sftpClient.ReadDir(path)
+		if err != nil {
+			return fmt.Errorf("failed to read directory %q: %w", path, err)
+		}
+
+		for _, entry := range entries {
+			childPath := filepath.Join(path, entry.Name())
+			if err := c.chmodRecursiveInternal(childPath, mode); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Chmod the item itself (after children for directories)
+	if err := c.sftpClient.Chmod(path, mode); err != nil {
+		return fmt.Errorf("failed to chmod %q: %w", path, err)
 	}
 
 	return nil

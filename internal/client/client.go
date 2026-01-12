@@ -35,6 +35,9 @@ type Client interface {
 	// Chown changes the ownership of a file or directory.
 	Chown(ctx context.Context, path string, uid, gid int) error
 
+	// ChmodRecursive recursively changes permissions on a directory and all contents.
+	ChmodRecursive(ctx context.Context, path string, mode fs.FileMode) error
+
 	// MkdirAll creates a directory and all parent directories.
 	MkdirAll(ctx context.Context, path string, mode fs.FileMode) error
 
@@ -44,17 +47,18 @@ type Client interface {
 
 // MockClient is a test double for Client.
 type MockClient struct {
-	CallFunc        func(ctx context.Context, method string, params any) (json.RawMessage, error)
-	CallAndWaitFunc func(ctx context.Context, method string, params any) (json.RawMessage, error)
-	WriteFileFunc   func(ctx context.Context, path string, content []byte, mode fs.FileMode) error
-	ReadFileFunc    func(ctx context.Context, path string) ([]byte, error)
-	DeleteFileFunc  func(ctx context.Context, path string) error
-	RemoveDirFunc   func(ctx context.Context, path string) error
-	RemoveAllFunc   func(ctx context.Context, path string) error
-	FileExistsFunc  func(ctx context.Context, path string) (bool, error)
-	ChownFunc       func(ctx context.Context, path string, uid, gid int) error
-	MkdirAllFunc    func(ctx context.Context, path string, mode fs.FileMode) error
-	CloseFunc       func() error
+	CallFunc           func(ctx context.Context, method string, params any) (json.RawMessage, error)
+	CallAndWaitFunc    func(ctx context.Context, method string, params any) (json.RawMessage, error)
+	WriteFileFunc      func(ctx context.Context, path string, content []byte, mode fs.FileMode) error
+	ReadFileFunc       func(ctx context.Context, path string) ([]byte, error)
+	DeleteFileFunc     func(ctx context.Context, path string) error
+	RemoveDirFunc      func(ctx context.Context, path string) error
+	RemoveAllFunc      func(ctx context.Context, path string) error
+	FileExistsFunc     func(ctx context.Context, path string) (bool, error)
+	ChownFunc          func(ctx context.Context, path string, uid, gid int) error
+	ChmodRecursiveFunc func(ctx context.Context, path string, mode fs.FileMode) error
+	MkdirAllFunc       func(ctx context.Context, path string, mode fs.FileMode) error
+	CloseFunc          func() error
 }
 
 func (m *MockClient) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
@@ -116,6 +120,13 @@ func (m *MockClient) FileExists(ctx context.Context, path string) (bool, error) 
 func (m *MockClient) Chown(ctx context.Context, path string, uid, gid int) error {
 	if m.ChownFunc != nil {
 		return m.ChownFunc(ctx, path, uid, gid)
+	}
+	return nil
+}
+
+func (m *MockClient) ChmodRecursive(ctx context.Context, path string, mode fs.FileMode) error {
+	if m.ChmodRecursiveFunc != nil {
+		return m.ChmodRecursiveFunc(ctx, path, mode)
 	}
 	return nil
 }

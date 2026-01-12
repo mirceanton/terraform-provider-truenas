@@ -21,6 +21,7 @@ type mockSFTPClient struct {
 	openFunc      func(path string) (sftpFile, error)
 	chmodFunc     func(path string, mode fs.FileMode) error
 	chownFunc     func(path string, uid, gid int) error
+	readDirFunc   func(path string) ([]fs.FileInfo, error)
 	closeFunc     func() error
 }
 
@@ -85,6 +86,13 @@ func (m *mockSFTPClient) Chown(path string, uid, gid int) error {
 		return m.chownFunc(path, uid, gid)
 	}
 	return nil
+}
+
+func (m *mockSFTPClient) ReadDir(path string) ([]fs.FileInfo, error) {
+	if m.readDirFunc != nil {
+		return m.readDirFunc(path)
+	}
+	return nil, nil
 }
 
 func (m *mockSFTPClient) Close() error {
