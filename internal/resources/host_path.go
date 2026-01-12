@@ -265,13 +265,6 @@ func (r *HostPathResource) ImportState(ctx context.Context, req resource.ImportS
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("path"), req.ID)...)
 }
 
-// hasPermissions returns true if any permission attributes are set.
-func (r *HostPathResource) hasPermissions(data *HostPathResourceModel) bool {
-	return (!data.Mode.IsNull() && !data.Mode.IsUnknown()) ||
-		(!data.UID.IsNull() && !data.UID.IsUnknown()) ||
-		(!data.GID.IsNull() && !data.GID.IsUnknown())
-}
-
 // hasUIDGID returns true if uid or gid are set (mode handled separately in mkdir).
 func (r *HostPathResource) hasUIDGID(data *HostPathResourceModel) bool {
 	return (!data.UID.IsNull() && !data.UID.IsUnknown()) ||
