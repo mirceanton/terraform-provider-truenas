@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -72,16 +73,25 @@ func (r *HostPathResource) Schema(ctx context.Context, req resource.SchemaReques
 				Description: "Unix mode (e.g., '755').",
 				Optional:    true,
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"uid": schema.Int64Attribute{
 				Description: "Owner user ID.",
 				Optional:    true,
 				Computed:    true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"gid": schema.Int64Attribute{
 				Description: "Owner group ID.",
 				Optional:    true,
 				Computed:    true,
+				PlanModifiers: []planmodifier.Int64{
+					int64planmodifier.UseStateForUnknown(),
+				},
 			},
 			"force_destroy": schema.BoolAttribute{
 				Description: "Force deletion of non-empty directories (recursive delete).",
@@ -188,10 +198,18 @@ func (r *HostPathResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	// Sync state from API response
 	data.ID = types.StringValue(path)
-	// Extract permission bits (mask off file type bits) and convert to octal string
-	data.Mode = types.StringValue(fmt.Sprintf("%o", statResp.Mode&0777))
-	data.UID = types.Int64Value(statResp.UID)
-	data.GID = types.Int64Value(statResp.GID)
+
+	// Only update optional+computed attributes if they were previously set
+	// This prevents drift when user didn't specify these values
+	if !data.Mode.IsNull() {
+		data.Mode = types.StringValue(fmt.Sprintf("%o", statResp.Mode&0777))
+	}
+	if !data.UID.IsNull() {
+		data.UID = types.Int64Value(statResp.UID)
+	}
+	if !data.GID.IsNull() {
+		data.GID = types.Int64Value(statResp.GID)
+	}
 
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

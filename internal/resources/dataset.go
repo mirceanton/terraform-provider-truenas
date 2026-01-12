@@ -113,22 +113,41 @@ func (r *DatasetResource) Schema(ctx context.Context, req resource.SchemaRequest
 			"mount_path": schema.StringAttribute{
 				Description: "Filesystem mount path.",
 				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"compression": schema.StringAttribute{
 				Description: "Compression algorithm (e.g., 'lz4', 'zstd', 'off').",
 				Optional:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"quota": schema.StringAttribute{
 				Description: "Dataset quota (e.g., '10G', '1T').",
 				Optional:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"refquota": schema.StringAttribute{
 				Description: "Dataset reference quota (e.g., '10G', '1T').",
 				Optional:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"atime": schema.StringAttribute{
 				Description: "Access time tracking ('on' or 'off').",
 				Optional:    true,
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
 			},
 			"force_destroy": schema.BoolAttribute{
 				Description: "When destroying this resource, also delete all child datasets. Defaults to false.",
@@ -271,10 +290,21 @@ func (r *DatasetResource) Read(ctx context.Context, req resource.ReadRequest, re
 	// Map response to model
 	data.ID = types.StringValue(ds.ID)
 	data.MountPath = types.StringValue(ds.Mountpoint)
-	data.Compression = types.StringValue(ds.Compression.Value)
-	data.Quota = types.StringValue(ds.Quota.Value)
-	data.RefQuota = types.StringValue(ds.RefQuota.Value)
-	data.Atime = types.StringValue(ds.Atime.Value)
+
+	// Only update optional+computed attributes if they were previously set
+	// This prevents drift when user didn't specify these values
+	if !data.Compression.IsNull() {
+		data.Compression = types.StringValue(ds.Compression.Value)
+	}
+	if !data.Quota.IsNull() {
+		data.Quota = types.StringValue(ds.Quota.Value)
+	}
+	if !data.RefQuota.IsNull() {
+		data.RefQuota = types.StringValue(ds.RefQuota.Value)
+	}
+	if !data.Atime.IsNull() {
+		data.Atime = types.StringValue(ds.Atime.Value)
+	}
 
 	// Populate pool/path from ID if not set (e.g., after import)
 	// ID format is "pool/path/to/dataset"
