@@ -128,3 +128,48 @@ func TestTrueNASError_Error_NoSuggestion(t *testing.T) {
 		t.Errorf("expected %q, got %q", "simple message", errStr)
 	}
 }
+
+func TestParseError_StripProcessExitPrefix(t *testing.T) {
+	raw := `Process exited with status 1: [EINVAL] Invalid config`
+
+	err := ParseTrueNASError(raw)
+
+	if err.Code != "EINVAL" {
+		t.Errorf("expected code EINVAL, got %s", err.Code)
+	}
+	if strings.Contains(err.Message, "Process exited") {
+		t.Error("expected Process exited prefix to be stripped")
+	}
+}
+
+func TestParseError_StripTracebackNewline(t *testing.T) {
+	raw := `[EINVAL] Invalid config
+Traceback (most recent call last):
+  File "middleware.py", line 100
+    raise ValidationError`
+
+	err := ParseTrueNASError(raw)
+
+	if err.Code != "EINVAL" {
+		t.Errorf("expected code EINVAL, got %s", err.Code)
+	}
+	if strings.Contains(err.Message, "Traceback") {
+		t.Error("expected Traceback to be stripped")
+	}
+	if err.Message != "Invalid config" {
+		t.Errorf("expected 'Invalid config', got %q", err.Message)
+	}
+}
+
+func TestParseError_StripTracebackSameLine(t *testing.T) {
+	raw := `Some error Traceback (most recent call last): in file.py`
+
+	err := ParseTrueNASError(raw)
+
+	if strings.Contains(err.Message, "Traceback") {
+		t.Error("expected Traceback to be stripped when on same line")
+	}
+	if err.Message != "Some error" {
+		t.Errorf("expected 'Some error', got %q", err.Message)
+	}
+}
