@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -25,16 +26,17 @@ type DatasetResource struct {
 
 // DatasetResourceModel describes the resource data model.
 type DatasetResourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Pool        types.String `tfsdk:"pool"`
-	Path        types.String `tfsdk:"path"`
-	Parent      types.String `tfsdk:"parent"`
-	Name        types.String `tfsdk:"name"`
-	MountPath   types.String `tfsdk:"mount_path"`
-	Compression types.String `tfsdk:"compression"`
-	Quota       types.String `tfsdk:"quota"`
-	RefQuota    types.String `tfsdk:"refquota"`
-	Atime       types.String `tfsdk:"atime"`
+	ID           types.String `tfsdk:"id"`
+	Pool         types.String `tfsdk:"pool"`
+	Path         types.String `tfsdk:"path"`
+	Parent       types.String `tfsdk:"parent"`
+	Name         types.String `tfsdk:"name"`
+	MountPath    types.String `tfsdk:"mount_path"`
+	Compression  types.String `tfsdk:"compression"`
+	Quota        types.String `tfsdk:"quota"`
+	RefQuota     types.String `tfsdk:"refquota"`
+	Atime        types.String `tfsdk:"atime"`
+	ForceDestroy types.Bool   `tfsdk:"force_destroy"`
 }
 
 // datasetCreateResponse represents the JSON response from pool.dataset.create.
@@ -126,6 +128,10 @@ func (r *DatasetResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"atime": schema.StringAttribute{
 				Description: "Access time tracking ('on' or 'off').",
+				Optional:    true,
+			},
+			"force_destroy": schema.BoolAttribute{
+				Description: "When destroying this resource, also delete all child datasets. Defaults to false.",
 				Optional:    true,
 			},
 		},
@@ -270,6 +276,16 @@ func (r *DatasetResource) Read(ctx context.Context, req resource.ReadRequest, re
 	data.RefQuota = types.StringValue(ds.RefQuota.Value)
 	data.Atime = types.StringValue(ds.Atime.Value)
 
+	// Populate pool/path from ID if not set (e.g., after import)
+	// ID format is "pool/path/to/dataset"
+	if data.Pool.IsNull() && data.Path.IsNull() && data.Parent.IsNull() && data.Name.IsNull() {
+		parts := strings.SplitN(ds.ID, "/", 2)
+		if len(parts) == 2 {
+			data.Pool = types.StringValue(parts[0])
+			data.Path = types.StringValue(parts[1])
+		}
+	}
+
 	// Save updated data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
@@ -309,8 +325,9 @@ func (r *DatasetResource) Update(ctx context.Context, req resource.UpdateRequest
 		updateParams["atime"] = data.Atime.ValueString()
 	}
 
-	// If no changes, just copy state to response
+	// If no changes, copy computed values from state and save
 	if len(updateParams) == 0 {
+		data.MountPath = state.MountPath
 		resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 		return
 	}
@@ -361,7 +378,15 @@ func (r *DatasetResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 	// Call the TrueNAS API
 	datasetID := data.ID.ValueString()
-	_, err := r.client.Call(ctx, "pool.dataset.delete", datasetID)
+
+	// Build delete params - API expects [id, options] when options provided
+	var params any = datasetID
+	if !data.ForceDestroy.IsNull() && data.ForceDestroy.ValueBool() {
+		params = []any{datasetID, map[string]bool{"recursive": true}}
+	}
+
+	_, err := r.client.Call(ctx, "pool.dataset.delete", params)
+
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Delete Dataset",

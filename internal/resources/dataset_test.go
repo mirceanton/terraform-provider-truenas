@@ -142,6 +142,15 @@ func TestDatasetResource_Schema(t *testing.T) {
 	if !atimeAttr.IsOptional() {
 		t.Error("expected 'atime' attribute to be optional")
 	}
+
+	// Verify force_destroy attribute exists and is optional
+	forceDestroyAttr, ok := resp.Schema.Attributes["force_destroy"]
+	if !ok {
+		t.Fatal("expected 'force_destroy' attribute in schema")
+	}
+	if !forceDestroyAttr.IsOptional() {
+		t.Error("expected 'force_destroy' attribute to be optional")
+	}
 }
 
 func TestDatasetResource_Configure_Success(t *testing.T) {
@@ -203,31 +212,33 @@ func getDatasetResourceSchema(t *testing.T) resource.SchemaResponse {
 }
 
 // createDatasetResourceModel creates a tftypes.Value for the dataset resource model
-func createDatasetResourceModel(id, pool, path, parent, name, mountPath, compression, quota, refquota, atime interface{}) tftypes.Value {
+func createDatasetResourceModel(id, pool, path, parent, name, mountPath, compression, quota, refquota, atime, forceDestroy interface{}) tftypes.Value {
 	return tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
-			"id":          tftypes.String,
-			"pool":        tftypes.String,
-			"path":        tftypes.String,
-			"parent":      tftypes.String,
-			"name":        tftypes.String,
-			"mount_path":  tftypes.String,
-			"compression": tftypes.String,
-			"quota":       tftypes.String,
-			"refquota":    tftypes.String,
-			"atime":       tftypes.String,
+			"id":            tftypes.String,
+			"pool":          tftypes.String,
+			"path":          tftypes.String,
+			"parent":        tftypes.String,
+			"name":          tftypes.String,
+			"mount_path":    tftypes.String,
+			"compression":   tftypes.String,
+			"quota":         tftypes.String,
+			"refquota":      tftypes.String,
+			"atime":         tftypes.String,
+			"force_destroy": tftypes.Bool,
 		},
 	}, map[string]tftypes.Value{
-		"id":          tftypes.NewValue(tftypes.String, id),
-		"pool":        tftypes.NewValue(tftypes.String, pool),
-		"path":        tftypes.NewValue(tftypes.String, path),
-		"parent":      tftypes.NewValue(tftypes.String, parent),
-		"name":        tftypes.NewValue(tftypes.String, name),
-		"mount_path":  tftypes.NewValue(tftypes.String, mountPath),
-		"compression": tftypes.NewValue(tftypes.String, compression),
-		"quota":       tftypes.NewValue(tftypes.String, quota),
-		"refquota":    tftypes.NewValue(tftypes.String, refquota),
-		"atime":       tftypes.NewValue(tftypes.String, atime),
+		"id":            tftypes.NewValue(tftypes.String, id),
+		"pool":          tftypes.NewValue(tftypes.String, pool),
+		"path":          tftypes.NewValue(tftypes.String, path),
+		"parent":        tftypes.NewValue(tftypes.String, parent),
+		"name":          tftypes.NewValue(tftypes.String, name),
+		"mount_path":    tftypes.NewValue(tftypes.String, mountPath),
+		"compression":   tftypes.NewValue(tftypes.String, compression),
+		"quota":         tftypes.NewValue(tftypes.String, quota),
+		"refquota":      tftypes.NewValue(tftypes.String, refquota),
+		"atime":         tftypes.NewValue(tftypes.String, atime),
+		"force_destroy": tftypes.NewValue(tftypes.Bool, forceDestroy),
 	})
 }
 
@@ -251,7 +262,7 @@ func TestDatasetResource_Create_Success(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	planValue := createDatasetResourceModel(nil, "storage", "apps", nil, nil, nil, "lz4", nil, nil, nil)
+	planValue := createDatasetResourceModel(nil, "storage", "apps", nil, nil, nil, "lz4", nil, nil, nil, nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -310,7 +321,7 @@ func TestDatasetResource_Create_InvalidConfig(t *testing.T) {
 	schemaResp := getDatasetResourceSchema(t)
 
 	// Neither pool/path nor parent/name provided
-	planValue := createDatasetResourceModel(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	planValue := createDatasetResourceModel(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -351,7 +362,7 @@ func TestDatasetResource_Create_WithParentName(t *testing.T) {
 	schemaResp := getDatasetResourceSchema(t)
 
 	// Use parent/name mode instead of pool/path
-	planValue := createDatasetResourceModel(nil, nil, nil, "tank/data", "apps", nil, nil, nil, nil, nil)
+	planValue := createDatasetResourceModel(nil, nil, nil, "tank/data", "apps", nil, nil, nil, nil, nil, nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -405,7 +416,7 @@ func TestDatasetResource_Create_APIError(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	planValue := createDatasetResourceModel(nil, "storage", "apps", nil, nil, nil, nil, nil, nil, nil)
+	planValue := createDatasetResourceModel(nil, "storage", "apps", nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -449,7 +460,7 @@ func TestDatasetResource_Read_Success(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -509,7 +520,7 @@ func TestDatasetResource_Read_DatasetNotFound(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -548,7 +559,7 @@ func TestDatasetResource_Read_APIError(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -595,10 +606,10 @@ func TestDatasetResource_Update_Success(t *testing.T) {
 	schemaResp := getDatasetResourceSchema(t)
 
 	// Current state has lz4 compression
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	// Plan has zstd compression (changed)
-	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "zstd", nil, nil, nil)
+	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "zstd", nil, nil, nil, nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -684,8 +695,8 @@ func TestDatasetResource_Update_NoChanges(t *testing.T) {
 	schemaResp := getDatasetResourceSchema(t)
 
 	// Same state and plan (no changes)
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
-	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
+	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -727,8 +738,8 @@ func TestDatasetResource_Update_APIError(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
-	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "zstd", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
+	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "zstd", nil, nil, nil, nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -770,7 +781,7 @@ func TestDatasetResource_Delete_Success(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	req := resource.DeleteRequest{
 		State: tfsdk.State{
@@ -813,7 +824,7 @@ func TestDatasetResource_Delete_APIError(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	req := resource.DeleteRequest{
 		State: tfsdk.State{
@@ -835,13 +846,76 @@ func TestDatasetResource_Delete_APIError(t *testing.T) {
 	}
 }
 
+func TestDatasetResource_Delete_WithForceDestroy(t *testing.T) {
+	var capturedMethod string
+	var capturedParams any
+
+	r := &DatasetResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				capturedMethod = method
+				capturedParams = params
+				return json.RawMessage(`null`), nil
+			},
+		},
+	}
+
+	schemaResp := getDatasetResourceSchema(t)
+
+	// State with force_destroy = true
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, true)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify the API was called correctly
+	if capturedMethod != "pool.dataset.delete" {
+		t.Errorf("expected method 'pool.dataset.delete', got %q", capturedMethod)
+	}
+
+	// Verify the params include recursive option
+	params, ok := capturedParams.([]any)
+	if !ok {
+		t.Fatalf("expected params to be []any, got %T", capturedParams)
+	}
+	if len(params) != 2 {
+		t.Fatalf("expected 2 params, got %d", len(params))
+	}
+	if params[0] != "storage/apps" {
+		t.Errorf("expected first param 'storage/apps', got %v", params[0])
+	}
+	opts, ok := params[1].(map[string]bool)
+	if !ok {
+		t.Fatalf("expected second param to be map[string]bool, got %T", params[1])
+	}
+	if !opts["recursive"] {
+		t.Error("expected recursive option to be true")
+	}
+}
+
 func TestDatasetResource_ImportState(t *testing.T) {
 	r := NewDatasetResource().(*DatasetResource)
 
 	schemaResp := getDatasetResourceSchema(t)
 
 	// Initialize state with empty values (null)
-	emptyStateValue := createDatasetResourceModel(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	emptyStateValue := createDatasetResourceModel(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := resource.ImportStateRequest{
 		ID: "storage/apps",
@@ -982,7 +1056,7 @@ func TestDatasetResource_Create_AllOptions(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	planValue := createDatasetResourceModel(nil, "storage", "apps", nil, nil, nil, "zstd", "10G", "5G", "on")
+	planValue := createDatasetResourceModel(nil, "storage", "apps", nil, nil, nil, "zstd", "10G", "5G", "on", nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -1046,7 +1120,7 @@ func TestDatasetResource_Read_WithParentName(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("tank/data/apps", nil, nil, "tank/data", "apps", "/mnt/tank/data/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("tank/data/apps", nil, nil, "tank/data", "apps", "/mnt/tank/data/apps", "lz4", nil, nil, nil, nil)
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -1090,7 +1164,7 @@ func TestDatasetResource_Create_InvalidJSONResponse(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	planValue := createDatasetResourceModel(nil, "storage", "apps", nil, nil, nil, nil, nil, nil, nil)
+	planValue := createDatasetResourceModel(nil, "storage", "apps", nil, nil, nil, nil, nil, nil, nil, nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -1124,7 +1198,7 @@ func TestDatasetResource_Read_InvalidJSONResponse(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -1158,8 +1232,8 @@ func TestDatasetResource_Update_InvalidJSONResponse(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
-	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "zstd", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
+	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "zstd", nil, nil, nil, nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -1209,10 +1283,10 @@ func TestDatasetResource_Update_QuotaChange(t *testing.T) {
 	schemaResp := getDatasetResourceSchema(t)
 
 	// Current state has no quota
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	// Plan adds quota
-	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", "10G", nil, nil)
+	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", "10G", nil, nil, nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -1276,8 +1350,8 @@ func TestDatasetResource_Update_RefQuotaChange(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
-	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, "5G", nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
+	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, "5G", nil, nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -1340,8 +1414,8 @@ func TestDatasetResource_Update_AtimeChange(t *testing.T) {
 
 	schemaResp := getDatasetResourceSchema(t)
 
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
-	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, "off")
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
+	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, "off", nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -1500,33 +1574,35 @@ func TestDatasetResource_Update_PlanParseError(t *testing.T) {
 	schemaResp := getDatasetResourceSchema(t)
 
 	// Valid state
-	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil)
+	stateValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "lz4", nil, nil, nil, nil)
 
 	// Invalid plan with wrong type
 	planValue := tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
-			"id":          tftypes.String,
-			"pool":        tftypes.Number, // Wrong type!
-			"path":        tftypes.String,
-			"parent":      tftypes.String,
-			"name":        tftypes.String,
-			"mount_path":  tftypes.String,
-			"compression": tftypes.String,
-			"quota":       tftypes.String,
-			"refquota":    tftypes.String,
-			"atime":       tftypes.String,
+			"id":            tftypes.String,
+			"pool":          tftypes.Number, // Wrong type!
+			"path":          tftypes.String,
+			"parent":        tftypes.String,
+			"name":          tftypes.String,
+			"mount_path":    tftypes.String,
+			"compression":   tftypes.String,
+			"quota":         tftypes.String,
+			"refquota":      tftypes.String,
+			"atime":         tftypes.String,
+			"force_destroy": tftypes.Bool,
 		},
 	}, map[string]tftypes.Value{
-		"id":          tftypes.NewValue(tftypes.String, "storage/apps"),
-		"pool":        tftypes.NewValue(tftypes.Number, 123), // Wrong type!
-		"path":        tftypes.NewValue(tftypes.String, "apps"),
-		"parent":      tftypes.NewValue(tftypes.String, nil),
-		"name":        tftypes.NewValue(tftypes.String, nil),
-		"mount_path":  tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
-		"compression": tftypes.NewValue(tftypes.String, "zstd"),
-		"quota":       tftypes.NewValue(tftypes.String, nil),
-		"refquota":    tftypes.NewValue(tftypes.String, nil),
-		"atime":       tftypes.NewValue(tftypes.String, nil),
+		"id":            tftypes.NewValue(tftypes.String, "storage/apps"),
+		"pool":          tftypes.NewValue(tftypes.Number, 123), // Wrong type!
+		"path":          tftypes.NewValue(tftypes.String, "apps"),
+		"parent":        tftypes.NewValue(tftypes.String, nil),
+		"name":          tftypes.NewValue(tftypes.String, nil),
+		"mount_path":    tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
+		"compression":   tftypes.NewValue(tftypes.String, "zstd"),
+		"quota":         tftypes.NewValue(tftypes.String, nil),
+		"refquota":      tftypes.NewValue(tftypes.String, nil),
+		"atime":         tftypes.NewValue(tftypes.String, nil),
+		"force_destroy": tftypes.NewValue(tftypes.Bool, nil),
 	})
 
 	req := resource.UpdateRequest{
@@ -1564,32 +1640,34 @@ func TestDatasetResource_Update_StateParseError(t *testing.T) {
 	// Invalid state with wrong type
 	stateValue := tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
-			"id":          tftypes.Number, // Wrong type!
-			"pool":        tftypes.String,
-			"path":        tftypes.String,
-			"parent":      tftypes.String,
-			"name":        tftypes.String,
-			"mount_path":  tftypes.String,
-			"compression": tftypes.String,
-			"quota":       tftypes.String,
-			"refquota":    tftypes.String,
-			"atime":       tftypes.String,
+			"id":            tftypes.Number, // Wrong type!
+			"pool":          tftypes.String,
+			"path":          tftypes.String,
+			"parent":        tftypes.String,
+			"name":          tftypes.String,
+			"mount_path":    tftypes.String,
+			"compression":   tftypes.String,
+			"quota":         tftypes.String,
+			"refquota":      tftypes.String,
+			"atime":         tftypes.String,
+			"force_destroy": tftypes.Bool,
 		},
 	}, map[string]tftypes.Value{
-		"id":          tftypes.NewValue(tftypes.Number, 123), // Wrong type!
-		"pool":        tftypes.NewValue(tftypes.String, "storage"),
-		"path":        tftypes.NewValue(tftypes.String, "apps"),
-		"parent":      tftypes.NewValue(tftypes.String, nil),
-		"name":        tftypes.NewValue(tftypes.String, nil),
-		"mount_path":  tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
-		"compression": tftypes.NewValue(tftypes.String, "lz4"),
-		"quota":       tftypes.NewValue(tftypes.String, nil),
-		"refquota":    tftypes.NewValue(tftypes.String, nil),
-		"atime":       tftypes.NewValue(tftypes.String, nil),
+		"id":            tftypes.NewValue(tftypes.Number, 123), // Wrong type!
+		"pool":          tftypes.NewValue(tftypes.String, "storage"),
+		"path":          tftypes.NewValue(tftypes.String, "apps"),
+		"parent":        tftypes.NewValue(tftypes.String, nil),
+		"name":          tftypes.NewValue(tftypes.String, nil),
+		"mount_path":    tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
+		"compression":   tftypes.NewValue(tftypes.String, "lz4"),
+		"quota":         tftypes.NewValue(tftypes.String, nil),
+		"refquota":      tftypes.NewValue(tftypes.String, nil),
+		"atime":         tftypes.NewValue(tftypes.String, nil),
+		"force_destroy": tftypes.NewValue(tftypes.Bool, nil),
 	})
 
 	// Valid plan
-	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "zstd", nil, nil, nil)
+	planValue := createDatasetResourceModel("storage/apps", "storage", "apps", nil, nil, "/mnt/storage/apps", "zstd", nil, nil, nil, nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -1626,28 +1704,30 @@ func TestDatasetResource_Delete_StateParseError(t *testing.T) {
 	// Invalid state with wrong type
 	stateValue := tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
-			"id":          tftypes.Number, // Wrong type!
-			"pool":        tftypes.String,
-			"path":        tftypes.String,
-			"parent":      tftypes.String,
-			"name":        tftypes.String,
-			"mount_path":  tftypes.String,
-			"compression": tftypes.String,
-			"quota":       tftypes.String,
-			"refquota":    tftypes.String,
-			"atime":       tftypes.String,
+			"id":            tftypes.Number, // Wrong type!
+			"pool":          tftypes.String,
+			"path":          tftypes.String,
+			"parent":        tftypes.String,
+			"name":          tftypes.String,
+			"mount_path":    tftypes.String,
+			"compression":   tftypes.String,
+			"quota":         tftypes.String,
+			"refquota":      tftypes.String,
+			"atime":         tftypes.String,
+			"force_destroy": tftypes.Bool,
 		},
 	}, map[string]tftypes.Value{
-		"id":          tftypes.NewValue(tftypes.Number, 123), // Wrong type!
-		"pool":        tftypes.NewValue(tftypes.String, "storage"),
-		"path":        tftypes.NewValue(tftypes.String, "apps"),
-		"parent":      tftypes.NewValue(tftypes.String, nil),
-		"name":        tftypes.NewValue(tftypes.String, nil),
-		"mount_path":  tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
-		"compression": tftypes.NewValue(tftypes.String, "lz4"),
-		"quota":       tftypes.NewValue(tftypes.String, nil),
-		"refquota":    tftypes.NewValue(tftypes.String, nil),
-		"atime":       tftypes.NewValue(tftypes.String, nil),
+		"id":            tftypes.NewValue(tftypes.Number, 123), // Wrong type!
+		"pool":          tftypes.NewValue(tftypes.String, "storage"),
+		"path":          tftypes.NewValue(tftypes.String, "apps"),
+		"parent":        tftypes.NewValue(tftypes.String, nil),
+		"name":          tftypes.NewValue(tftypes.String, nil),
+		"mount_path":    tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
+		"compression":   tftypes.NewValue(tftypes.String, "lz4"),
+		"quota":         tftypes.NewValue(tftypes.String, nil),
+		"refquota":      tftypes.NewValue(tftypes.String, nil),
+		"atime":         tftypes.NewValue(tftypes.String, nil),
+		"force_destroy": tftypes.NewValue(tftypes.Bool, nil),
 	})
 
 	req := resource.DeleteRequest{
