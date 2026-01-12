@@ -26,11 +26,12 @@ type HostPathResource struct {
 
 // HostPathResourceModel describes the resource data model.
 type HostPathResourceModel struct {
-	ID   types.String `tfsdk:"id"`
-	Path types.String `tfsdk:"path"`
-	Mode types.String `tfsdk:"mode"`
-	UID  types.Int64  `tfsdk:"uid"`
-	GID  types.Int64  `tfsdk:"gid"`
+	ID           types.String `tfsdk:"id"`
+	Path         types.String `tfsdk:"path"`
+	Mode         types.String `tfsdk:"mode"`
+	UID          types.Int64  `tfsdk:"uid"`
+	GID          types.Int64  `tfsdk:"gid"`
+	ForceDestroy types.Bool   `tfsdk:"force_destroy"`
 }
 
 // statResponse represents the JSON response from filesystem.stat.
@@ -81,6 +82,10 @@ func (r *HostPathResource) Schema(ctx context.Context, req resource.SchemaReques
 				Description: "Owner group ID.",
 				Optional:    true,
 				Computed:    true,
+			},
+			"force_destroy": schema.BoolAttribute{
+				Description: "Force deletion of non-empty directories (recursive delete).",
+				Optional:    true,
 			},
 		},
 	}
@@ -243,7 +248,16 @@ func (r *HostPathResource) Delete(ctx context.Context, req resource.DeleteReques
 	p := data.Path.ValueString()
 
 	// Delete the directory using SFTP
-	if err := r.client.RemoveDir(ctx, p); err != nil {
+	var err error
+	if data.ForceDestroy.ValueBool() {
+		// Recursive delete when force_destroy is true
+		err = r.client.RemoveAll(ctx, p)
+	} else {
+		// Only remove empty directory when force_destroy is false
+		err = r.client.RemoveDir(ctx, p)
+	}
+
+	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Delete Host Path",
 			fmt.Sprintf("Cannot delete directory %q: %s", p, err.Error()),

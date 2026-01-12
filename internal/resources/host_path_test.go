@@ -167,20 +167,27 @@ func getHostPathResourceSchema(t *testing.T) resource.SchemaResponse {
 
 // createHostPathResourceModel creates a tftypes.Value for the host_path resource model
 func createHostPathResourceModel(id, path, mode, uid, gid interface{}) tftypes.Value {
+	return createHostPathResourceModelWithForceDestroy(id, path, mode, uid, gid, nil)
+}
+
+// createHostPathResourceModelWithForceDestroy creates a tftypes.Value for the host_path resource model with force_destroy
+func createHostPathResourceModelWithForceDestroy(id, path, mode, uid, gid, forceDestroy interface{}) tftypes.Value {
 	return tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
-			"id":   tftypes.String,
-			"path": tftypes.String,
-			"mode": tftypes.String,
-			"uid":  tftypes.Number,
-			"gid":  tftypes.Number,
+			"id":            tftypes.String,
+			"path":          tftypes.String,
+			"mode":          tftypes.String,
+			"uid":           tftypes.Number,
+			"gid":           tftypes.Number,
+			"force_destroy": tftypes.Bool,
 		},
 	}, map[string]tftypes.Value{
-		"id":   tftypes.NewValue(tftypes.String, id),
-		"path": tftypes.NewValue(tftypes.String, path),
-		"mode": tftypes.NewValue(tftypes.String, mode),
-		"uid":  tftypes.NewValue(tftypes.Number, uid),
-		"gid":  tftypes.NewValue(tftypes.Number, gid),
+		"id":            tftypes.NewValue(tftypes.String, id),
+		"path":          tftypes.NewValue(tftypes.String, path),
+		"mode":          tftypes.NewValue(tftypes.String, mode),
+		"uid":           tftypes.NewValue(tftypes.Number, uid),
+		"gid":           tftypes.NewValue(tftypes.Number, gid),
+		"force_destroy": tftypes.NewValue(tftypes.Bool, forceDestroy),
 	})
 }
 
@@ -1252,4 +1259,234 @@ func TestHostPathResource_ImplementsImportState(t *testing.T) {
 	r := NewHostPathResource()
 
 	var _ resource.ResourceWithImportState = r.(*HostPathResource)
+}
+
+// Test Schema includes force_destroy attribute
+func TestHostPathResource_Schema_ForceDestroy(t *testing.T) {
+	r := NewHostPathResource()
+
+	req := resource.SchemaRequest{}
+	resp := &resource.SchemaResponse{}
+
+	r.Schema(context.Background(), req, resp)
+
+	// Verify force_destroy attribute exists and is optional
+	forceDestroyAttr, ok := resp.Schema.Attributes["force_destroy"]
+	if !ok {
+		t.Fatal("expected 'force_destroy' attribute in schema")
+	}
+	if !forceDestroyAttr.IsOptional() {
+		t.Error("expected 'force_destroy' attribute to be optional")
+	}
+}
+
+// Test Delete with force_destroy=true uses RemoveAll
+func TestHostPathResource_Delete_ForceDestroy(t *testing.T) {
+	var removeAllCalled bool
+	var removedPath string
+	var removeDirCalled bool
+
+	r := &HostPathResource{
+		client: &client.MockClient{
+			RemoveAllFunc: func(ctx context.Context, path string) error {
+				removeAllCalled = true
+				removedPath = path
+				return nil
+			},
+			RemoveDirFunc: func(ctx context.Context, path string) error {
+				removeDirCalled = true
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getHostPathResourceSchema(t)
+
+	// State with force_destroy = true
+	stateValue := createHostPathResourceModelWithForceDestroy("/mnt/tank/apps/myapp", "/mnt/tank/apps/myapp", "755", 1000, 1000, true)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// RemoveAll should be called when force_destroy is true
+	if !removeAllCalled {
+		t.Error("expected RemoveAll to be called when force_destroy is true")
+	}
+
+	if removedPath != "/mnt/tank/apps/myapp" {
+		t.Errorf("expected path '/mnt/tank/apps/myapp', got %q", removedPath)
+	}
+
+	// RemoveDir should NOT be called when force_destroy is true
+	if removeDirCalled {
+		t.Error("expected RemoveDir NOT to be called when force_destroy is true")
+	}
+}
+
+// Test Delete with force_destroy=false uses RemoveDir
+func TestHostPathResource_Delete_NoForceDestroy(t *testing.T) {
+	var removeAllCalled bool
+	var removeDirCalled bool
+	var removedPath string
+
+	r := &HostPathResource{
+		client: &client.MockClient{
+			RemoveAllFunc: func(ctx context.Context, path string) error {
+				removeAllCalled = true
+				return nil
+			},
+			RemoveDirFunc: func(ctx context.Context, path string) error {
+				removeDirCalled = true
+				removedPath = path
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getHostPathResourceSchema(t)
+
+	// State with force_destroy = false
+	stateValue := createHostPathResourceModelWithForceDestroy("/mnt/tank/apps/myapp", "/mnt/tank/apps/myapp", "755", 1000, 1000, false)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// RemoveDir should be called when force_destroy is false
+	if !removeDirCalled {
+		t.Error("expected RemoveDir to be called when force_destroy is false")
+	}
+
+	if removedPath != "/mnt/tank/apps/myapp" {
+		t.Errorf("expected path '/mnt/tank/apps/myapp', got %q", removedPath)
+	}
+
+	// RemoveAll should NOT be called when force_destroy is false
+	if removeAllCalled {
+		t.Error("expected RemoveAll NOT to be called when force_destroy is false")
+	}
+}
+
+// Test Delete with force_destroy unset (nil) uses RemoveDir (default behavior)
+func TestHostPathResource_Delete_ForceDestroyNil(t *testing.T) {
+	var removeAllCalled bool
+	var removeDirCalled bool
+	var removedPath string
+
+	r := &HostPathResource{
+		client: &client.MockClient{
+			RemoveAllFunc: func(ctx context.Context, path string) error {
+				removeAllCalled = true
+				return nil
+			},
+			RemoveDirFunc: func(ctx context.Context, path string) error {
+				removeDirCalled = true
+				removedPath = path
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getHostPathResourceSchema(t)
+
+	// State with force_destroy = nil (not set) - uses the original helper
+	stateValue := createHostPathResourceModel("/mnt/tank/apps/myapp", "/mnt/tank/apps/myapp", "755", 1000, 1000)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// RemoveDir should be called when force_destroy is nil (default)
+	if !removeDirCalled {
+		t.Error("expected RemoveDir to be called when force_destroy is nil")
+	}
+
+	if removedPath != "/mnt/tank/apps/myapp" {
+		t.Errorf("expected path '/mnt/tank/apps/myapp', got %q", removedPath)
+	}
+
+	// RemoveAll should NOT be called when force_destroy is nil
+	if removeAllCalled {
+		t.Error("expected RemoveAll NOT to be called when force_destroy is nil")
+	}
+}
+
+// Test Delete with force_destroy error
+func TestHostPathResource_Delete_ForceDestroy_Error(t *testing.T) {
+	r := &HostPathResource{
+		client: &client.MockClient{
+			RemoveAllFunc: func(ctx context.Context, path string) error {
+				return errors.New("permission denied")
+			},
+		},
+	}
+
+	schemaResp := getHostPathResourceSchema(t)
+
+	stateValue := createHostPathResourceModelWithForceDestroy("/mnt/tank/apps/myapp", "/mnt/tank/apps/myapp", "755", 1000, 1000, true)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for RemoveAll error")
+	}
 }
