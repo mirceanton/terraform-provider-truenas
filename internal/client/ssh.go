@@ -2,14 +2,14 @@ package client
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
-	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 
 	"al.essio.dev/pkg/shellescape"
@@ -387,33 +387,25 @@ func (c *SSHClient) connectSFTP() error {
 	return nil
 }
 
-// WriteFile writes content to a file on the remote system.
-func (c *SSHClient) WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode) error {
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
-			return err
-		}
+// WriteFile writes content to a file on the remote system using the TrueNAS
+// filesystem.file_receive API. This runs with root privileges via middleware,
+// allowing writes to paths that would otherwise require elevated permissions.
+// uid and gid specify file ownership (-1 means unchanged).
+func (c *SSHClient) WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error {
+	b64Content := base64.StdEncoding.EncodeToString(content)
+	params := []any{
+		path,
+		b64Content,
+		map[string]any{
+			"mode": int(mode),
+			"uid":  uid,
+			"gid":  gid,
+		},
 	}
-
-	// Create the file
-	file, err := c.sftpClient.Create(path)
+	_, err := c.Call(ctx, "filesystem.file_receive", params)
 	if err != nil {
-		return fmt.Errorf("failed to create file %q: %w", path, err)
+		return fmt.Errorf("failed to write file %q: %w", path, err)
 	}
-	defer file.Close()
-
-	// Write content
-	_, err = file.Write(content)
-	if err != nil {
-		return fmt.Errorf("failed to write to file %q: %w", path, err)
-	}
-
-	// Set permissions
-	if err := c.sftpClient.Chmod(path, mode); err != nil {
-		return fmt.Errorf("failed to set permissions on %q: %w", path, err)
-	}
-
 	return nil
 }
 
@@ -442,149 +434,122 @@ func (c *SSHClient) ReadFile(ctx context.Context, path string) ([]byte, error) {
 	return content, nil
 }
 
-// DeleteFile removes a file from the remote system.
-func (c *SSHClient) DeleteFile(ctx context.Context, path string) error {
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
+// runSudo executes a command with sudo via SSH.
+func (c *SSHClient) runSudo(ctx context.Context, args ...string) error {
+	// Ensure we're connected (only if not already mocked)
+	if c.clientWrapper == nil {
+		if err := c.connect(); err != nil {
 			return err
 		}
 	}
 
-	if err := c.sftpClient.Remove(path); err != nil {
+	// Build command with proper escaping
+	var escaped []string
+	for _, arg := range args {
+		escaped = append(escaped, shellescape.Quote(arg))
+	}
+	cmd := "sudo " + strings.Join(escaped, " ")
+
+	// Create session
+	session, err := c.clientWrapper.NewSession()
+	if err != nil {
+		return err
+	}
+	defer session.Close()
+
+	// Execute command
+	output, err := session.CombinedOutput(cmd)
+	if err != nil {
+		if len(output) > 0 {
+			return fmt.Errorf("%w: %s", err, string(output))
+		}
+		return err
+	}
+	return nil
+}
+
+// DeleteFile removes a file from the remote system using sudo rm.
+func (c *SSHClient) DeleteFile(ctx context.Context, path string) error {
+	if err := c.runSudo(ctx, "rm", path); err != nil {
 		return fmt.Errorf("failed to delete file %q: %w", path, err)
 	}
-
 	return nil
 }
 
-// RemoveDir removes an empty directory from the remote system.
+// RemoveDir removes an empty directory from the remote system using sudo rmdir.
 func (c *SSHClient) RemoveDir(ctx context.Context, path string) error {
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
-			return err
-		}
-	}
-
-	if err := c.sftpClient.RemoveDirectory(path); err != nil {
+	if err := c.runSudo(ctx, "rmdir", path); err != nil {
 		return fmt.Errorf("failed to remove directory %q: %w", path, err)
 	}
-
 	return nil
 }
 
-// FileExists checks if a file exists on the remote system.
+// FileExists checks if a file exists on the remote system using the TrueNAS
+// filesystem.stat API. This runs with root privileges via middleware.
 func (c *SSHClient) FileExists(ctx context.Context, path string) (bool, error) {
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
-			return false, err
-		}
-	}
-
-	_, err := c.sftpClient.Stat(path)
+	_, err := c.Call(ctx, "filesystem.stat", path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		// Check for ENOENT error indicating file doesn't exist
+		if strings.Contains(err.Error(), "[ENOENT]") || strings.Contains(err.Error(), "not found") {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to stat file %q: %w", path, err)
 	}
-
 	return true, nil
 }
 
-// MkdirAll creates a directory and all parent directories.
+// MkdirAll creates a directory and all parent directories using the TrueNAS
+// filesystem.mkdir API. This runs with root privileges via middleware.
 func (c *SSHClient) MkdirAll(ctx context.Context, path string, mode fs.FileMode) error {
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
-			return err
-		}
+	params := map[string]any{
+		"path": path,
+		"options": map[string]any{
+			"mode": fmt.Sprintf("%04o", mode),
+		},
 	}
-
-	if err := c.sftpClient.MkdirAll(path); err != nil {
+	_, err := c.Call(ctx, "filesystem.mkdir", params)
+	if err != nil {
 		return fmt.Errorf("failed to create directory %q: %w", path, err)
 	}
-
-	// Apply the requested permissions
-	if err := c.sftpClient.Chmod(path, mode); err != nil {
-		return fmt.Errorf("failed to set permissions on directory %q: %w", path, err)
-	}
-
 	return nil
 }
 
-// RemoveAll recursively removes a directory and all its contents.
+// RemoveAll recursively removes a directory and all its contents using sudo rm -rf.
 func (c *SSHClient) RemoveAll(ctx context.Context, path string) error {
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
-			return err
-		}
-	}
-
-	if err := c.sftpClient.RemoveAll(path); err != nil {
+	if err := c.runSudo(ctx, "rm", "-rf", path); err != nil {
 		return fmt.Errorf("failed to remove directory %q: %w", path, err)
 	}
-
 	return nil
 }
 
-// Chown changes the ownership of a file or directory.
+// Chown changes the ownership of a file or directory using the TrueNAS
+// filesystem.chown API. This runs with root privileges via middleware.
 func (c *SSHClient) Chown(ctx context.Context, path string, uid, gid int) error {
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
-			return err
-		}
+	params := map[string]any{
+		"path": path,
+		"uid":  uid,
+		"gid":  gid,
 	}
-
-	if err := c.sftpClient.Chown(path, uid, gid); err != nil {
+	_, err := c.CallAndWait(ctx, "filesystem.chown", params)
+	if err != nil {
 		return fmt.Errorf("failed to change ownership of %q: %w", path, err)
 	}
-
 	return nil
 }
 
-// ChmodRecursive recursively changes permissions on a directory and all contents.
+// ChmodRecursive recursively changes permissions on a directory and all contents
+// using the TrueNAS filesystem.setperm API. This runs with root privileges via middleware.
 func (c *SSHClient) ChmodRecursive(ctx context.Context, path string, mode fs.FileMode) error {
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
-			return err
-		}
+	params := map[string]any{
+		"path": path,
+		"mode": fmt.Sprintf("%04o", mode),
+		"options": map[string]any{
+			"recursive": true,
+		},
 	}
-
-	return c.chmodRecursiveInternal(path, mode)
-}
-
-// chmodRecursiveInternal is the recursive implementation of ChmodRecursive.
-func (c *SSHClient) chmodRecursiveInternal(path string, mode fs.FileMode) error {
-	info, err := c.sftpClient.Stat(path)
+	_, err := c.CallAndWait(ctx, "filesystem.setperm", params)
 	if err != nil {
-		return fmt.Errorf("failed to stat %q: %w", path, err)
-	}
-
-	// If it's a directory, recurse into children first
-	if info.IsDir() {
-		entries, err := c.sftpClient.ReadDir(path)
-		if err != nil {
-			return fmt.Errorf("failed to read directory %q: %w", path, err)
-		}
-
-		for _, entry := range entries {
-			childPath := filepath.Join(path, entry.Name())
-			if err := c.chmodRecursiveInternal(childPath, mode); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Chmod the item itself (after children for directories)
-	if err := c.sftpClient.Chmod(path, mode); err != nil {
 		return fmt.Errorf("failed to chmod %q: %w", path, err)
 	}
-
 	return nil
 }
