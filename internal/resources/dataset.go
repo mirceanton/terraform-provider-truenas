@@ -257,7 +257,7 @@ func (r *DatasetResource) Create(ctx context.Context, req resource.CreateRequest
 	if fullName == "" {
 		resp.Diagnostics.AddError(
 			"Invalid Configuration",
-			"Either 'pool' and 'path' or 'parent' and 'name' must be provided.",
+			"Either 'pool' with 'path', or 'parent' with 'path' (or deprecated 'name') must be provided.",
 		)
 		return
 	}
