@@ -39,6 +39,19 @@ func TestHostPathResource_Metadata(t *testing.T) {
 	}
 }
 
+func TestHostPathResource_Schema_Deprecated(t *testing.T) {
+	r := NewHostPathResource()
+
+	req := resource.SchemaRequest{}
+	resp := &resource.SchemaResponse{}
+
+	r.Schema(context.Background(), req, resp)
+
+	if resp.Schema.DeprecationMessage == "" {
+		t.Error("expected host_path schema to have deprecation message")
+	}
+}
+
 func TestHostPathResource_Schema(t *testing.T) {
 	r := NewHostPathResource()
 

@@ -54,7 +54,8 @@ func (r *HostPathResource) Metadata(ctx context.Context, req resource.MetadataRe
 
 func (r *HostPathResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		Description: "Manages a TrueNAS host path directory for app storage mounts.",
+		Description:        "Manages a TrueNAS host path directory for app storage mounts.",
+		DeprecationMessage: "Use truenas_dataset with nested datasets instead. host_path relies on SFTP which may not work with non-root SSH users. Datasets are created via the TrueNAS API and provide better ZFS integration.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Description: "Host path identifier (the full path).",
