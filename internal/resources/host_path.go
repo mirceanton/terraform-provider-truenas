@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"path/filepath"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -268,31 +269,7 @@ func (r *HostPathResource) Delete(ctx context.Context, req resource.DeleteReques
 	// Delete the directory using SFTP
 	var err error
 	if data.ForceDestroy.ValueBool() {
-		// Best effort - fix permissions before deletion using TrueNAS API
-		// This handles permission issues from apps that may have restricted access
-		// Uses filesystem.setperm with stripacl to remove ACLs, set ownership to root,
-		// and set permissive mode recursively - all in one API call
-		permParams := map[string]any{
-			"path": p,
-			"uid":  0,
-			"gid":  0,
-			"mode": "777",
-			"options": map[string]any{
-				"stripacl":  true,
-				"recursive": true,
-				"traverse":  true,
-			},
-		}
-		_, permErr := r.client.CallAndWait(ctx, "filesystem.setperm", permParams)
-		if permErr != nil {
-			resp.Diagnostics.AddWarning(
-				"Failed to Set Permissions Before Delete",
-				fmt.Sprintf("filesystem.setperm failed for %q: %s. Will attempt deletion anyway.", p, permErr.Error()),
-			)
-		}
-
-		// Recursive delete when force_destroy is true
-		err = r.client.RemoveAll(ctx, p)
+		err = r.forceDestroyHostPath(ctx, p, resp)
 	} else {
 		// Only remove empty directory when force_destroy is false
 		err = r.client.RemoveDir(ctx, p)
@@ -305,6 +282,91 @@ func (r *HostPathResource) Delete(ctx context.Context, req resource.DeleteReques
 		)
 		return
 	}
+}
+
+// forceDestroyHostPath handles deletion with force_destroy=true, including
+// permission manipulation on parent directory with guaranteed restore via defer.
+func (r *HostPathResource) forceDestroyHostPath(ctx context.Context, p string, resp *resource.DeleteResponse) error {
+	parentPath := filepath.Dir(p)
+
+	// Capture parent directory permissions before modification
+	var originalParentMode string
+	var originalParentUID, originalParentGID int64
+	var parentModified bool
+
+	parentResult, parentStatErr := r.client.Call(ctx, "filesystem.stat", parentPath)
+	if parentStatErr == nil {
+		var parentStat statResponse
+		if jsonErr := json.Unmarshal(parentResult, &parentStat); jsonErr == nil {
+			originalParentMode = fmt.Sprintf("%o", parentStat.Mode&0777)
+			originalParentUID = parentStat.UID
+			originalParentGID = parentStat.GID
+		}
+	}
+
+	// Best effort - fix permissions on target directory using TrueNAS API
+	// This handles permission issues from apps that may have restricted access
+	// Uses filesystem.setperm with stripacl to remove ACLs, set ownership to root,
+	// and set permissive mode recursively - all in one API call
+	permParams := map[string]any{
+		"path": p,
+		"uid":  0,
+		"gid":  0,
+		"mode": "777",
+		"options": map[string]any{
+			"stripacl":  true,
+			"recursive": true,
+			"traverse":  true,
+		},
+	}
+	_, permErr := r.client.CallAndWait(ctx, "filesystem.setperm", permParams)
+	if permErr != nil {
+		resp.Diagnostics.AddWarning(
+			"Failed to Set Permissions Before Delete",
+			fmt.Sprintf("filesystem.setperm failed for %q: %s. Will attempt deletion anyway.", p, permErr.Error()),
+		)
+	}
+
+	// Set permissive permissions on parent directory to allow deletion
+	// Need write permission on parent to remove an entry from it
+	parentPermParams := map[string]any{
+		"path": parentPath,
+		"uid":  0,
+		"gid":  0,
+		"mode": "777",
+	}
+	_, parentPermErr := r.client.CallAndWait(ctx, "filesystem.setperm", parentPermParams)
+	if parentPermErr != nil {
+		resp.Diagnostics.AddWarning(
+			"Failed to Set Parent Permissions Before Delete",
+			fmt.Sprintf("filesystem.setperm failed for parent %q: %s. Will attempt deletion anyway.", parentPath, parentPermErr.Error()),
+		)
+	} else {
+		parentModified = true
+	}
+
+	// Defer restoration of parent permissions - runs regardless of deletion success/failure
+	defer func() {
+		if !parentModified || parentStatErr != nil {
+			return
+		}
+		restoreParams := map[string]any{
+			"path": parentPath,
+			"uid":  originalParentUID,
+			"gid":  originalParentGID,
+			"mode": originalParentMode,
+		}
+		_, restoreErr := r.client.CallAndWait(ctx, "filesystem.setperm", restoreParams)
+		if restoreErr != nil {
+			resp.Diagnostics.AddWarning(
+				"Failed to Restore Parent Permissions",
+				fmt.Sprintf("Could not restore original permissions on %q: %s", parentPath, restoreErr.Error()),
+			)
+		}
+	}()
+
+	// Recursive delete when force_destroy is true
+	return r.client.RemoveAll(ctx, p)
 }
 
 func (r *HostPathResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

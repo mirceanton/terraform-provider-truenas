@@ -1280,10 +1280,9 @@ func TestHostPathResource_Schema_ForceDestroy(t *testing.T) {
 	}
 }
 
-// Test Delete with force_destroy=true calls filesystem.setperm then RemoveAll
+// Test Delete with force_destroy=true calls filesystem.setperm on target and parent, then RemoveAll, then restores parent
 func TestHostPathResource_Delete_ForceDestroy(t *testing.T) {
-	var setpermCalled bool
-	var setpermParams any
+	var setpermCalls []map[string]any
 	var removeAllCalled bool
 	var removedPath string
 	var removeDirCalled bool
@@ -1291,11 +1290,29 @@ func TestHostPathResource_Delete_ForceDestroy(t *testing.T) {
 
 	r := &HostPathResource{
 		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "filesystem.stat" {
+					// Return mock parent stat response with mode 755 (16877 = 040755)
+					callOrder = append(callOrder, "stat-parent")
+					return json.RawMessage(`{"mode": 16877, "uid": 1000, "gid": 1000}`), nil
+				}
+				return json.RawMessage(`null`), nil
+			},
 			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "filesystem.setperm" {
-					setpermCalled = true
-					setpermParams = params
-					callOrder = append(callOrder, "setperm")
+					p, _ := params.(map[string]any)
+					setpermCalls = append(setpermCalls, p)
+					path := p["path"].(string)
+					if path == "/mnt/tank/apps/myapp" {
+						callOrder = append(callOrder, "setperm-target")
+					} else if path == "/mnt/tank/apps" {
+						// Check if this is restore (has original values) or initial set (has 777)
+						if p["mode"] == "755" {
+							callOrder = append(callOrder, "setperm-parent-restore")
+						} else {
+							callOrder = append(callOrder, "setperm-parent")
+						}
+					}
 				}
 				return json.RawMessage(`null`), nil
 			},
@@ -1336,48 +1353,52 @@ func TestHostPathResource_Delete_ForceDestroy(t *testing.T) {
 		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
 	}
 
-	// filesystem.setperm should be called to fix permissions before deletion
-	if !setpermCalled {
-		t.Error("expected filesystem.setperm to be called when force_destroy is true")
+	// Should have 3 setperm calls: target, parent, restore parent
+	if len(setpermCalls) != 3 {
+		t.Fatalf("expected 3 setperm calls, got %d", len(setpermCalls))
 	}
 
-	// Verify setperm params
-	params, ok := setpermParams.(map[string]any)
+	// First setperm: target path with recursive options
+	targetParams := setpermCalls[0]
+	if targetParams["path"] != "/mnt/tank/apps/myapp" {
+		t.Errorf("expected first setperm path '/mnt/tank/apps/myapp', got %v", targetParams["path"])
+	}
+	if targetParams["mode"] != "777" {
+		t.Errorf("expected mode '777', got %v", targetParams["mode"])
+	}
+	options, ok := targetParams["options"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected params to be map[string]any, got %T", setpermParams)
+		t.Fatalf("expected options to be map[string]any, got %T", targetParams["options"])
 	}
-
-	if params["path"] != "/mnt/tank/apps/myapp" {
-		t.Errorf("expected setperm path '/mnt/tank/apps/myapp', got %v", params["path"])
-	}
-
-	if params["uid"] != 0 {
-		t.Errorf("expected uid 0, got %v", params["uid"])
-	}
-
-	if params["gid"] != 0 {
-		t.Errorf("expected gid 0, got %v", params["gid"])
-	}
-
-	if params["mode"] != "777" {
-		t.Errorf("expected mode '777', got %v", params["mode"])
-	}
-
-	options, ok := params["options"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected options to be map[string]any, got %T", params["options"])
-	}
-
 	if options["stripacl"] != true {
 		t.Errorf("expected stripacl=true, got %v", options["stripacl"])
 	}
-
 	if options["recursive"] != true {
 		t.Errorf("expected recursive=true, got %v", options["recursive"])
 	}
 
-	if options["traverse"] != true {
-		t.Errorf("expected traverse=true, got %v", options["traverse"])
+	// Second setperm: parent path made writable
+	parentParams := setpermCalls[1]
+	if parentParams["path"] != "/mnt/tank/apps" {
+		t.Errorf("expected second setperm path '/mnt/tank/apps', got %v", parentParams["path"])
+	}
+	if parentParams["mode"] != "777" {
+		t.Errorf("expected parent mode '777', got %v", parentParams["mode"])
+	}
+
+	// Third setperm: parent path restored to original
+	restoreParams := setpermCalls[2]
+	if restoreParams["path"] != "/mnt/tank/apps" {
+		t.Errorf("expected restore setperm path '/mnt/tank/apps', got %v", restoreParams["path"])
+	}
+	if restoreParams["mode"] != "755" {
+		t.Errorf("expected restored mode '755', got %v", restoreParams["mode"])
+	}
+	if restoreParams["uid"] != int64(1000) {
+		t.Errorf("expected restored uid 1000, got %v", restoreParams["uid"])
+	}
+	if restoreParams["gid"] != int64(1000) {
+		t.Errorf("expected restored gid 1000, got %v", restoreParams["gid"])
 	}
 
 	// RemoveAll should be called when force_destroy is true
@@ -1394,9 +1415,16 @@ func TestHostPathResource_Delete_ForceDestroy(t *testing.T) {
 		t.Error("expected RemoveDir NOT to be called when force_destroy is true")
 	}
 
-	// Verify call order: setperm -> RemoveAll
-	if len(callOrder) != 2 || callOrder[0] != "setperm" || callOrder[1] != "RemoveAll" {
-		t.Errorf("expected call order [setperm, RemoveAll], got %v", callOrder)
+	// Verify call order: stat-parent -> setperm-target -> setperm-parent -> RemoveAll -> setperm-parent-restore
+	expectedOrder := []string{"stat-parent", "setperm-target", "setperm-parent", "RemoveAll", "setperm-parent-restore"}
+	if len(callOrder) != len(expectedOrder) {
+		t.Errorf("expected call order %v, got %v", expectedOrder, callOrder)
+	} else {
+		for i, expected := range expectedOrder {
+			if callOrder[i] != expected {
+				t.Errorf("call order[%d]: expected %q, got %q", i, expected, callOrder[i])
+			}
+		}
 	}
 }
 
@@ -1574,6 +1602,15 @@ func TestHostPathResource_Read_PreservesNullMode(t *testing.T) {
 func TestHostPathResource_Delete_ForceDestroy_Error(t *testing.T) {
 	r := &HostPathResource{
 		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "filesystem.stat" {
+					return json.RawMessage(`{"mode": 16877, "uid": 1000, "gid": 1000}`), nil
+				}
+				return json.RawMessage(`null`), nil
+			},
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`null`), nil
+			},
 			RemoveAllFunc: func(ctx context.Context, path string) error {
 				return errors.New("permission denied")
 			},
@@ -1606,14 +1643,21 @@ func TestHostPathResource_Delete_ForceDestroy_Error(t *testing.T) {
 
 // Test Delete with force_destroy - setperm failure adds warning but deletion proceeds
 func TestHostPathResource_Delete_ForceDestroy_SetpermFails(t *testing.T) {
-	var setpermCalled bool
+	var setpermCallCount int
 	var removeAllCalled bool
 
 	r := &HostPathResource{
 		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "filesystem.stat" {
+					// Return mock parent stat response
+					return json.RawMessage(`{"mode": 16877, "uid": 1000, "gid": 1000}`), nil
+				}
+				return json.RawMessage(`null`), nil
+			},
 			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "filesystem.setperm" {
-					setpermCalled = true
+					setpermCallCount++
 					return nil, errors.New("setperm failed")
 				}
 				return json.RawMessage(`null`), nil
@@ -1649,17 +1693,87 @@ func TestHostPathResource_Delete_ForceDestroy_SetpermFails(t *testing.T) {
 		t.Fatalf("unexpected error: setperm failure should be warning only, got %v", resp.Diagnostics)
 	}
 
-	// Should have a warning about setperm failure
-	if !resp.Diagnostics.HasError() && len(resp.Diagnostics) == 0 {
-		t.Error("expected a warning about setperm failure")
+	// Should have warnings about setperm failures (target and parent)
+	if len(resp.Diagnostics) < 2 {
+		t.Errorf("expected at least 2 warnings about setperm failures, got %d", len(resp.Diagnostics))
 	}
 
-	// Both should still be called
-	if !setpermCalled {
-		t.Error("expected filesystem.setperm to be called")
+	// Should have called setperm twice (target and parent), but not restore since parent setperm failed
+	if setpermCallCount != 2 {
+		t.Errorf("expected 2 setperm calls, got %d", setpermCallCount)
 	}
 
 	if !removeAllCalled {
 		t.Error("expected RemoveAll to be called even after setperm failure")
+	}
+}
+
+// Test Delete with force_destroy - restore failure adds warning but deletion succeeds
+func TestHostPathResource_Delete_ForceDestroy_RestoreFails(t *testing.T) {
+	var setpermCallCount int
+	var removeAllCalled bool
+
+	r := &HostPathResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "filesystem.stat" {
+					// Return mock parent stat response
+					return json.RawMessage(`{"mode": 16877, "uid": 1000, "gid": 1000}`), nil
+				}
+				return json.RawMessage(`null`), nil
+			},
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "filesystem.setperm" {
+					setpermCallCount++
+					// First two calls (target and parent) succeed, third (restore) fails
+					if setpermCallCount == 3 {
+						return nil, errors.New("restore failed")
+					}
+				}
+				return json.RawMessage(`null`), nil
+			},
+			RemoveAllFunc: func(ctx context.Context, path string) error {
+				removeAllCalled = true
+				return nil
+			},
+		},
+	}
+
+	schemaResp := getHostPathResourceSchema(t)
+
+	stateValue := createHostPathResourceModelWithForceDestroy("/mnt/tank/apps/myapp", "/mnt/tank/apps/myapp", "755", 1000, 1000, true)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Delete(context.Background(), req, resp)
+
+	// Should NOT have an error - restore failure is a warning, deletion succeeded
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected error: restore failure should be warning only, got %v", resp.Diagnostics)
+	}
+
+	// Should have exactly 1 warning about restore failure
+	if len(resp.Diagnostics) != 1 {
+		t.Errorf("expected 1 warning about restore failure, got %d", len(resp.Diagnostics))
+	}
+
+	// Should have called setperm 3 times: target, parent, restore (which failed)
+	if setpermCallCount != 3 {
+		t.Errorf("expected 3 setperm calls, got %d", setpermCallCount)
+	}
+
+	if !removeAllCalled {
+		t.Error("expected RemoveAll to be called")
 	}
 }
