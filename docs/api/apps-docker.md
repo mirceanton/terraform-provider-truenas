@@ -10,17 +10,41 @@ Query installed applications.
 midclt call app.query
 midclt call app.query '[[["name", "=", "plex"]]]'
 midclt call app.query '[[["state", "=", "RUNNING"]]]'
+# With config retrieval:
+midclt call app.query '[[["name", "=", "myapp"]]]' '{"extra": {"retrieve_config": true}}'
 ```
 
-Returns:
-- `id` - App ID
-- `name` - App name
-- `state` - RUNNING, STOPPED, DEPLOYING
-- `upgrade_available` - Boolean
-- `human_version` - Human-readable version
-- `version` - Semantic version
-- `metadata` - App metadata
-- `notes` - Release notes
+<!-- Source: internal/resources/app.go:40-50 -->
+**Response Schema:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| name | string | Application name |
+| state | string | RUNNING, STOPPED, DEPLOYING, etc. |
+| custom_app | boolean | True for custom Docker Compose apps |
+| config | object | App configuration (only with `retrieve_config: true`) |
+| active_workloads | array | Container workload information |
+| upgrade_available | boolean | Whether an upgrade is available |
+| human_version | string | Human-readable version |
+| version | string | Semantic version |
+| metadata | object | App metadata |
+| notes | string | Release notes |
+
+**Options:** `{"extra": {"retrieve_config": true}}` to include full app config in response.
+
+<details>
+<summary>Example Response</summary>
+
+```json
+[{
+  "name": "myapp",
+  "state": "RUNNING",
+  "custom_app": true,
+  "config": {},
+  "active_workloads": []
+}]
+```
+</details>
 
 ### app.available
 List available applications from catalog.
@@ -67,11 +91,31 @@ midclt call app.create '{
 }'
 ```
 
+For custom Docker Compose apps:
+```bash
+midclt call app.create '{
+  "app_name": "myapp",
+  "custom_app": true,
+  "custom_compose_config_string": "version: \"3\"\nservices:\n  web:\n    image: nginx"
+}'
+```
+
+<!-- Source: internal/resources/app.go:127-136 -->
+**Note:** This is a **job-based operation**. Use `midclt -j` to wait for completion, or poll `core.get_jobs` for status. The direct response contains job progress, not the final app state. Query `app.query` after job completion for the created app.
+
 ### app.update
 Update application configuration.
 ```bash
 midclt call app.update "plex" '{"values": {"network": {"host_network": false}}}'
 ```
+
+For custom Docker Compose apps:
+```bash
+midclt call app.update "myapp" '{"custom_compose_config_string": "version: \"3\"\nservices:\n  web:\n    image: nginx:latest"}'
+```
+
+<!-- Source: internal/resources/app.go:267-280 -->
+**Note:** This is a **job-based operation**. Parameters use positional array format: `[app_name, {properties}]`. Use `midclt -j` to wait for completion.
 
 ### app.upgrade
 Upgrade an application.
@@ -121,6 +165,9 @@ Delete an application.
 ```bash
 midclt call app.delete "plex"
 ```
+
+<!-- Source: internal/resources/app.go:328-337 -->
+**Note:** This is a **job-based operation**. Use `midclt -j` to wait for completion.
 
 ### app.stats
 Get application statistics.
