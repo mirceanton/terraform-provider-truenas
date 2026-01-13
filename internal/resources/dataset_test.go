@@ -2326,6 +2326,23 @@ func TestDatasetResource_Read_BothMountPathAndFullPath(t *testing.T) {
 	}
 }
 
+func TestDatasetResource_Schema_MountPathDeprecated(t *testing.T) {
+	r := NewDatasetResource()
+
+	req := resource.SchemaRequest{}
+	resp := &resource.SchemaResponse{}
+
+	r.Schema(context.Background(), req, resp)
+
+	mountPathAttr, ok := resp.Schema.Attributes["mount_path"]
+	if !ok {
+		t.Fatal("expected 'mount_path' attribute in schema")
+	}
+	if mountPathAttr.GetDeprecationMessage() == "" {
+		t.Error("expected 'mount_path' attribute to have deprecation message")
+	}
+}
+
 // Test Read reads permissions from filesystem.stat
 func TestDatasetResource_Read_WithPermissions(t *testing.T) {
 	r := &DatasetResource{

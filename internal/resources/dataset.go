@@ -154,8 +154,9 @@ func (r *DatasetResource) Schema(ctx context.Context, req resource.SchemaRequest
 				},
 			},
 			"mount_path": schema.StringAttribute{
-				Description: "Filesystem mount path.",
-				Computed:    true,
+				Description:        "Filesystem mount path.",
+				DeprecationMessage: "Use 'full_path' instead. This attribute will be removed in a future version.",
+				Computed:           true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
