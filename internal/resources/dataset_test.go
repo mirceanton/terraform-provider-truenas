@@ -1188,6 +1188,31 @@ func TestGetFullName(t *testing.T) {
 	}
 }
 
+func TestGetFullName_PathWithParent(t *testing.T) {
+	// path with parent should work (new preferred way)
+	model := DatasetResourceModel{
+		Parent: stringValue("tank/data"),
+		Path:   stringValue("apps"),
+	}
+	result := getFullName(&model)
+	if result != "tank/data/apps" {
+		t.Errorf("expected 'tank/data/apps', got %q", result)
+	}
+}
+
+func TestGetFullName_PathOverName(t *testing.T) {
+	// when both path and name are provided with parent, path takes precedence
+	model := DatasetResourceModel{
+		Parent: stringValue("tank/data"),
+		Path:   stringValue("newpath"),
+		Name:   stringValue("oldname"),
+	}
+	result := getFullName(&model)
+	if result != "tank/data/newpath" {
+		t.Errorf("expected 'tank/data/newpath', got %q", result)
+	}
+}
+
 // stringValue is a helper to create a types.String with a value
 func stringValue(s string) types.String {
 	return types.StringValue(s)

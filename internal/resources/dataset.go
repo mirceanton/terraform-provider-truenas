@@ -520,7 +520,8 @@ func (r *DatasetResource) ImportState(ctx context.Context, req resource.ImportSt
 // getFullName returns the full dataset name from the model.
 // It supports two modes:
 // 1. pool + path (e.g., pool="tank", path="data/apps" -> "tank/data/apps")
-// 2. parent + name (e.g., parent="tank/data", name="apps" -> "tank/data/apps")
+// 2. parent + path (new preferred way) or parent + name (deprecated)
+//    (e.g., parent="tank/data", path="apps" -> "tank/data/apps")
 // If neither mode is valid, it returns an empty string.
 // If both modes are provided, pool/path takes precedence.
 func getFullName(data *DatasetResourceModel) string {
@@ -532,12 +533,18 @@ func getFullName(data *DatasetResourceModel) string {
 		return fmt.Sprintf("%s/%s", data.Pool.ValueString(), data.Path.ValueString())
 	}
 
-	// Mode 2: parent + name
+	// Mode 2: parent + path (new preferred way) or parent + name (deprecated)
 	hasParent := !data.Parent.IsNull() && !data.Parent.IsUnknown() && data.Parent.ValueString() != ""
 	hasName := !data.Name.IsNull() && !data.Name.IsUnknown() && data.Name.ValueString() != ""
 
-	if hasParent && hasName {
-		return fmt.Sprintf("%s/%s", data.Parent.ValueString(), data.Name.ValueString())
+	if hasParent {
+		// Prefer path over name when both are set
+		if hasPath {
+			return fmt.Sprintf("%s/%s", data.Parent.ValueString(), data.Path.ValueString())
+		}
+		if hasName {
+			return fmt.Sprintf("%s/%s", data.Parent.ValueString(), data.Name.ValueString())
+		}
 	}
 
 	// Invalid configuration
