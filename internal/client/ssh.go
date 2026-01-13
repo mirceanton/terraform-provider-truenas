@@ -361,21 +361,19 @@ func (c *SSHClient) Close() error {
 
 // connectSFTP establishes the SFTP connection if not already connected.
 func (c *SSHClient) connectSFTP() error {
+	// First ensure SSH is connected (this has its own locking)
+	if err := c.connect(); err != nil {
+		return err
+	}
+
+	// Now lock to check/set SFTP client
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Already have SFTP client
+	// Already have SFTP client (double-check after acquiring lock)
 	if c.sftpClient != nil {
 		return nil
 	}
-
-	// Ensure SSH is connected first (unlock mutex temporarily)
-	c.mu.Unlock()
-	if err := c.connect(); err != nil {
-		c.mu.Lock()
-		return err
-	}
-	c.mu.Lock()
 
 	// Create SFTP client
 	sftpConn, err := sftp.NewClient(c.client)
@@ -489,8 +487,9 @@ func (c *SSHClient) RemoveDir(ctx context.Context, path string) error {
 func (c *SSHClient) FileExists(ctx context.Context, path string) (bool, error) {
 	_, err := c.Call(ctx, "filesystem.stat", path)
 	if err != nil {
-		// Check for ENOENT error indicating file doesn't exist
-		if strings.Contains(err.Error(), "[ENOENT]") || strings.Contains(err.Error(), "not found") {
+		// Parse the error to check for ENOENT (file not found)
+		parsed := ParseTrueNASError(err.Error())
+		if parsed.Code == "ENOENT" {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to stat file %q: %w", path, err)
