@@ -120,6 +120,43 @@ func TestProvider_Schema_SSHBlock(t *testing.T) {
 	}
 }
 
+func TestProvider_Schema_SSHBlock_HostKeyFingerprint(t *testing.T) {
+	p := New("1.0.0")()
+
+	req := provider.SchemaRequest{}
+	resp := &provider.SchemaResponse{}
+
+	p.Schema(context.Background(), req, resp)
+
+	// Get the SSH block
+	sshBlock, ok := resp.Schema.Blocks["ssh"]
+	if !ok {
+		t.Fatal("expected 'ssh' block in schema")
+	}
+
+	// Cast to SingleNestedBlock to access attributes
+	singleBlock, ok := sshBlock.(schema.SingleNestedBlock)
+	if !ok {
+		t.Fatalf("expected ssh block to be SingleNestedBlock, got %T", sshBlock)
+	}
+
+	// Verify host_key_fingerprint attribute exists
+	hostKeyFingerprintAttr, ok := singleBlock.Attributes["host_key_fingerprint"]
+	if !ok {
+		t.Fatal("expected 'host_key_fingerprint' attribute in ssh block")
+	}
+
+	// Verify it is required
+	if !hostKeyFingerprintAttr.IsRequired() {
+		t.Error("expected 'host_key_fingerprint' attribute to be required")
+	}
+
+	// Verify it is NOT sensitive (fingerprints are not secrets)
+	if hostKeyFingerprintAttr.IsSensitive() {
+		t.Error("expected 'host_key_fingerprint' attribute to NOT be sensitive")
+	}
+}
+
 func TestProvider_DataSources(t *testing.T) {
 	p := &TrueNASProvider{version: "1.0.0"}
 
@@ -167,6 +204,8 @@ func TestProvider_Resources(t *testing.T) {
 }
 
 // Test ED25519 key for testing (same as in client tests)
+const testHostKeyFingerprint = "SHA256:uVW+XYZ0123456789ABCDEFghijklmnopqrstuv"
+
 const testPrivateKey = `-----BEGIN OPENSSH PRIVATE KEY-----
 b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
 QyNTUxOQAAACCtws8zNrmNWDx+nxb26zA2iTVTn4TZQyK1yANm0XiawgAAAJjjXr/4416/
@@ -187,14 +226,16 @@ func createTestConfigureRequest(t *testing.T, host, authMethod string, ssh *SSHB
 
 	// Build SSH block value
 	var sshValue tftypes.Value
+	sshObjectType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"port":                 tftypes.Number,
+			"user":                 tftypes.String,
+			"private_key":          tftypes.String,
+			"host_key_fingerprint": tftypes.String,
+		},
+	}
 	if ssh == nil {
-		sshValue = tftypes.NewValue(tftypes.Object{
-			AttributeTypes: map[string]tftypes.Type{
-				"port":        tftypes.Number,
-				"user":        tftypes.String,
-				"private_key": tftypes.String,
-			},
-		}, nil)
+		sshValue = tftypes.NewValue(sshObjectType, nil)
 	} else {
 		var portValue tftypes.Value
 		if ssh.Port.IsNull() {
@@ -217,16 +258,18 @@ func createTestConfigureRequest(t *testing.T, host, authMethod string, ssh *SSHB
 			privateKeyValue = tftypes.NewValue(tftypes.String, ssh.PrivateKey.ValueString())
 		}
 
-		sshValue = tftypes.NewValue(tftypes.Object{
-			AttributeTypes: map[string]tftypes.Type{
-				"port":        tftypes.Number,
-				"user":        tftypes.String,
-				"private_key": tftypes.String,
-			},
-		}, map[string]tftypes.Value{
-			"port":        portValue,
-			"user":        userValue,
-			"private_key": privateKeyValue,
+		var hostKeyFingerprintValue tftypes.Value
+		if ssh.HostKeyFingerprint.IsNull() {
+			hostKeyFingerprintValue = tftypes.NewValue(tftypes.String, nil)
+		} else {
+			hostKeyFingerprintValue = tftypes.NewValue(tftypes.String, ssh.HostKeyFingerprint.ValueString())
+		}
+
+		sshValue = tftypes.NewValue(sshObjectType, map[string]tftypes.Value{
+			"port":                 portValue,
+			"user":                 userValue,
+			"private_key":          privateKeyValue,
+			"host_key_fingerprint": hostKeyFingerprintValue,
 		})
 	}
 
@@ -235,13 +278,7 @@ func createTestConfigureRequest(t *testing.T, host, authMethod string, ssh *SSHB
 		AttributeTypes: map[string]tftypes.Type{
 			"host":        tftypes.String,
 			"auth_method": tftypes.String,
-			"ssh": tftypes.Object{
-				AttributeTypes: map[string]tftypes.Type{
-					"port":        tftypes.Number,
-					"user":        tftypes.String,
-					"private_key": tftypes.String,
-				},
-			},
+			"ssh":         sshObjectType,
 		},
 	}, map[string]tftypes.Value{
 		"host":        tftypes.NewValue(tftypes.String, host),
@@ -267,9 +304,10 @@ func TestProvider_Configure_InvalidAuthMethod(t *testing.T) {
 	p := &TrueNASProvider{version: "1.0.0"}
 
 	ssh := &SSHBlockModel{
-		Port:       types.Int64Null(),
-		User:       types.StringNull(),
-		PrivateKey: types.StringValue(testPrivateKey),
+		Port:               types.Int64Null(),
+		User:               types.StringNull(),
+		PrivateKey:         types.StringValue(testPrivateKey),
+		HostKeyFingerprint: types.StringValue(testHostKeyFingerprint),
 	}
 
 	req := createTestConfigureRequest(t, "truenas.local", "api", ssh)
@@ -311,9 +349,10 @@ func TestProvider_Configure_Success(t *testing.T) {
 	p := &TrueNASProvider{version: "1.0.0"}
 
 	ssh := &SSHBlockModel{
-		Port:       types.Int64Null(),
-		User:       types.StringNull(),
-		PrivateKey: types.StringValue(testPrivateKey),
+		Port:               types.Int64Null(),
+		User:               types.StringNull(),
+		PrivateKey:         types.StringValue(testPrivateKey),
+		HostKeyFingerprint: types.StringValue(testHostKeyFingerprint),
 	}
 
 	req := createTestConfigureRequest(t, "truenas.local", "ssh", ssh)
@@ -338,9 +377,10 @@ func TestProvider_Configure_WithCustomPortAndUser(t *testing.T) {
 	p := &TrueNASProvider{version: "1.0.0"}
 
 	ssh := &SSHBlockModel{
-		Port:       types.Int64Value(2222),
-		User:       types.StringValue("admin"),
-		PrivateKey: types.StringValue(testPrivateKey),
+		Port:               types.Int64Value(2222),
+		User:               types.StringValue("admin"),
+		PrivateKey:         types.StringValue(testPrivateKey),
+		HostKeyFingerprint: types.StringValue(testHostKeyFingerprint),
 	}
 
 	req := createTestConfigureRequest(t, "truenas.local", "ssh", ssh)
@@ -362,31 +402,28 @@ func TestProvider_Configure_ConfigParseError(t *testing.T) {
 	p.Schema(context.Background(), schemaReq, schemaResp)
 
 	// Create an invalid config value with wrong type (number instead of string for host)
+	sshObjectType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"port":                 tftypes.Number,
+			"user":                 tftypes.String,
+			"private_key":          tftypes.String,
+			"host_key_fingerprint": tftypes.String,
+		},
+	}
 	invalidConfigValue := tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
 			"host":        tftypes.Number, // Wrong type!
 			"auth_method": tftypes.String,
-			"ssh": tftypes.Object{
-				AttributeTypes: map[string]tftypes.Type{
-					"port":        tftypes.Number,
-					"user":        tftypes.String,
-					"private_key": tftypes.String,
-				},
-			},
+			"ssh":         sshObjectType,
 		},
 	}, map[string]tftypes.Value{
 		"host":        tftypes.NewValue(tftypes.Number, 123), // Wrong type!
 		"auth_method": tftypes.NewValue(tftypes.String, "ssh"),
-		"ssh": tftypes.NewValue(tftypes.Object{
-			AttributeTypes: map[string]tftypes.Type{
-				"port":        tftypes.Number,
-				"user":        tftypes.String,
-				"private_key": tftypes.String,
-			},
-		}, map[string]tftypes.Value{
-			"port":        tftypes.NewValue(tftypes.Number, nil),
-			"user":        tftypes.NewValue(tftypes.String, nil),
-			"private_key": tftypes.NewValue(tftypes.String, testPrivateKey),
+		"ssh": tftypes.NewValue(sshObjectType, map[string]tftypes.Value{
+			"port":                 tftypes.NewValue(tftypes.Number, nil),
+			"user":                 tftypes.NewValue(tftypes.String, nil),
+			"private_key":          tftypes.NewValue(tftypes.String, testPrivateKey),
+			"host_key_fingerprint": tftypes.NewValue(tftypes.String, testHostKeyFingerprint),
 		}),
 	})
 
@@ -419,31 +456,28 @@ func TestProvider_Configure_InvalidSSHClient(t *testing.T) {
 	p.Schema(context.Background(), schemaReq, schemaResp)
 
 	// Create config with empty private_key (this will fail client validation)
+	sshObjectType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"port":                 tftypes.Number,
+			"user":                 tftypes.String,
+			"private_key":          tftypes.String,
+			"host_key_fingerprint": tftypes.String,
+		},
+	}
 	configValue := tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
 			"host":        tftypes.String,
 			"auth_method": tftypes.String,
-			"ssh": tftypes.Object{
-				AttributeTypes: map[string]tftypes.Type{
-					"port":        tftypes.Number,
-					"user":        tftypes.String,
-					"private_key": tftypes.String,
-				},
-			},
+			"ssh":         sshObjectType,
 		},
 	}, map[string]tftypes.Value{
 		"host":        tftypes.NewValue(tftypes.String, "truenas.local"),
 		"auth_method": tftypes.NewValue(tftypes.String, "ssh"),
-		"ssh": tftypes.NewValue(tftypes.Object{
-			AttributeTypes: map[string]tftypes.Type{
-				"port":        tftypes.Number,
-				"user":        tftypes.String,
-				"private_key": tftypes.String,
-			},
-		}, map[string]tftypes.Value{
-			"port":        tftypes.NewValue(tftypes.Number, nil),
-			"user":        tftypes.NewValue(tftypes.String, nil),
-			"private_key": tftypes.NewValue(tftypes.String, ""), // Empty private key
+		"ssh": tftypes.NewValue(sshObjectType, map[string]tftypes.Value{
+			"port":                 tftypes.NewValue(tftypes.Number, nil),
+			"user":                 tftypes.NewValue(tftypes.String, nil),
+			"private_key":          tftypes.NewValue(tftypes.String, ""), // Empty private key
+			"host_key_fingerprint": tftypes.NewValue(tftypes.String, testHostKeyFingerprint),
 		}),
 	})
 
