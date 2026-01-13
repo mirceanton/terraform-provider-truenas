@@ -108,6 +108,6 @@ func NewHostKeyError(host string, expected, actual string) *TrueNASError {
 	return &TrueNASError{
 		Code:       "EHOSTKEY",
 		Message:    fmt.Sprintf("host key verification failed for %s: expected %s, got %s", host, expected, actual),
-		Suggestion: "Verify the fingerprint on your TrueNAS server: ssh-keygen -lvf /etc/ssh/ssh_host_rsa_key.pub",
+		Suggestion: "Verify the fingerprint: ssh-keyscan <host> 2>/dev/null | ssh-keygen -lf -",
 	}
 }

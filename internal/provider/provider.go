@@ -79,7 +79,7 @@ func (p *TrueNASProvider) Schema(ctx context.Context, req provider.SchemaRequest
 					},
 					"host_key_fingerprint": schema.StringAttribute{
 						Description: "SHA256 fingerprint of the TrueNAS server's SSH host key. " +
-							"Get it with: ssh-keygen -lvf /etc/ssh/ssh_host_rsa_key.pub",
+							"Get it with: ssh-keyscan <host> 2>/dev/null | ssh-keygen -lf -",
 						Required:  true,
 						Sensitive: false,
 					},
