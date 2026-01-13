@@ -32,6 +32,7 @@ type DatasetResourceModel struct {
 	Parent       types.String `tfsdk:"parent"`
 	Name         types.String `tfsdk:"name"`
 	MountPath    types.String `tfsdk:"mount_path"`
+	FullPath     types.String `tfsdk:"full_path"`
 	Compression  types.String `tfsdk:"compression"`
 	Quota        types.String `tfsdk:"quota"`
 	RefQuota     types.String `tfsdk:"refquota"`
@@ -153,6 +154,13 @@ func (r *DatasetResource) Schema(ctx context.Context, req resource.SchemaRequest
 			},
 			"mount_path": schema.StringAttribute{
 				Description: "Filesystem mount path.",
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"full_path": schema.StringAttribute{
+				Description: "Full filesystem path to the mounted dataset (e.g., '/mnt/tank/data').",
 				Computed:    true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),

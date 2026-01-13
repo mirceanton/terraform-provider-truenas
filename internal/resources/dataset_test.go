@@ -218,6 +218,11 @@ func createDatasetResourceModel(id, pool, path, parent, name, mountPath, compres
 
 // createDatasetResourceModelWithPerms creates a tftypes.Value for the dataset resource model with permissions
 func createDatasetResourceModelWithPerms(id, pool, path, parent, name, mountPath, compression, quota, refquota, atime, forceDestroy, mode, uid, gid interface{}) tftypes.Value {
+	return createDatasetResourceModelFull(id, pool, path, parent, name, mountPath, nil, compression, quota, refquota, atime, forceDestroy, mode, uid, gid)
+}
+
+// createDatasetResourceModelFull creates a tftypes.Value for the dataset resource model with all fields
+func createDatasetResourceModelFull(id, pool, path, parent, name, mountPath, fullPath, compression, quota, refquota, atime, forceDestroy, mode, uid, gid interface{}) tftypes.Value {
 	return tftypes.NewValue(tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
 			"id":            tftypes.String,
@@ -226,6 +231,7 @@ func createDatasetResourceModelWithPerms(id, pool, path, parent, name, mountPath
 			"parent":        tftypes.String,
 			"name":          tftypes.String,
 			"mount_path":    tftypes.String,
+			"full_path":     tftypes.String,
 			"compression":   tftypes.String,
 			"quota":         tftypes.String,
 			"refquota":      tftypes.String,
@@ -242,6 +248,7 @@ func createDatasetResourceModelWithPerms(id, pool, path, parent, name, mountPath
 		"parent":        tftypes.NewValue(tftypes.String, parent),
 		"name":          tftypes.NewValue(tftypes.String, name),
 		"mount_path":    tftypes.NewValue(tftypes.String, mountPath),
+		"full_path":     tftypes.NewValue(tftypes.String, fullPath),
 		"compression":   tftypes.NewValue(tftypes.String, compression),
 		"quota":         tftypes.NewValue(tftypes.String, quota),
 		"refquota":      tftypes.NewValue(tftypes.String, refquota),
@@ -1642,6 +1649,7 @@ func TestDatasetResource_Create_PlanParseError(t *testing.T) {
 			"parent":        tftypes.String,
 			"name":          tftypes.String,
 			"mount_path":    tftypes.String,
+			"full_path":     tftypes.String,
 			"compression":   tftypes.String,
 			"quota":         tftypes.String,
 			"refquota":      tftypes.String,
@@ -1658,6 +1666,7 @@ func TestDatasetResource_Create_PlanParseError(t *testing.T) {
 		"parent":        tftypes.NewValue(tftypes.String, nil),
 		"name":          tftypes.NewValue(tftypes.String, nil),
 		"mount_path":    tftypes.NewValue(tftypes.String, nil),
+		"full_path":     tftypes.NewValue(tftypes.String, nil),
 		"compression":   tftypes.NewValue(tftypes.String, nil),
 		"quota":         tftypes.NewValue(tftypes.String, nil),
 		"refquota":      tftypes.NewValue(tftypes.String, nil),
@@ -1705,6 +1714,7 @@ func TestDatasetResource_Read_StateParseError(t *testing.T) {
 			"parent":        tftypes.String,
 			"name":          tftypes.String,
 			"mount_path":    tftypes.String,
+			"full_path":     tftypes.String,
 			"compression":   tftypes.String,
 			"quota":         tftypes.String,
 			"refquota":      tftypes.String,
@@ -1721,6 +1731,7 @@ func TestDatasetResource_Read_StateParseError(t *testing.T) {
 		"parent":        tftypes.NewValue(tftypes.String, nil),
 		"name":          tftypes.NewValue(tftypes.String, nil),
 		"mount_path":    tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
+		"full_path":     tftypes.NewValue(tftypes.String, nil),
 		"compression":   tftypes.NewValue(tftypes.String, "lz4"),
 		"quota":         tftypes.NewValue(tftypes.String, nil),
 		"refquota":      tftypes.NewValue(tftypes.String, nil),
@@ -1771,6 +1782,7 @@ func TestDatasetResource_Update_PlanParseError(t *testing.T) {
 			"parent":        tftypes.String,
 			"name":          tftypes.String,
 			"mount_path":    tftypes.String,
+			"full_path":     tftypes.String,
 			"compression":   tftypes.String,
 			"quota":         tftypes.String,
 			"refquota":      tftypes.String,
@@ -1787,6 +1799,7 @@ func TestDatasetResource_Update_PlanParseError(t *testing.T) {
 		"parent":        tftypes.NewValue(tftypes.String, nil),
 		"name":          tftypes.NewValue(tftypes.String, nil),
 		"mount_path":    tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
+		"full_path":     tftypes.NewValue(tftypes.String, nil),
 		"compression":   tftypes.NewValue(tftypes.String, "zstd"),
 		"quota":         tftypes.NewValue(tftypes.String, nil),
 		"refquota":      tftypes.NewValue(tftypes.String, nil),
@@ -1838,6 +1851,7 @@ func TestDatasetResource_Update_StateParseError(t *testing.T) {
 			"parent":        tftypes.String,
 			"name":          tftypes.String,
 			"mount_path":    tftypes.String,
+			"full_path":     tftypes.String,
 			"compression":   tftypes.String,
 			"quota":         tftypes.String,
 			"refquota":      tftypes.String,
@@ -1854,6 +1868,7 @@ func TestDatasetResource_Update_StateParseError(t *testing.T) {
 		"parent":        tftypes.NewValue(tftypes.String, nil),
 		"name":          tftypes.NewValue(tftypes.String, nil),
 		"mount_path":    tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
+		"full_path":     tftypes.NewValue(tftypes.String, nil),
 		"compression":   tftypes.NewValue(tftypes.String, "lz4"),
 		"quota":         tftypes.NewValue(tftypes.String, nil),
 		"refquota":      tftypes.NewValue(tftypes.String, nil),
@@ -2010,6 +2025,7 @@ func TestDatasetResource_Delete_StateParseError(t *testing.T) {
 			"parent":        tftypes.String,
 			"name":          tftypes.String,
 			"mount_path":    tftypes.String,
+			"full_path":     tftypes.String,
 			"compression":   tftypes.String,
 			"quota":         tftypes.String,
 			"refquota":      tftypes.String,
@@ -2026,6 +2042,7 @@ func TestDatasetResource_Delete_StateParseError(t *testing.T) {
 		"parent":        tftypes.NewValue(tftypes.String, nil),
 		"name":          tftypes.NewValue(tftypes.String, nil),
 		"mount_path":    tftypes.NewValue(tftypes.String, "/mnt/storage/apps"),
+		"full_path":     tftypes.NewValue(tftypes.String, nil),
 		"compression":   tftypes.NewValue(tftypes.String, "lz4"),
 		"quota":         tftypes.NewValue(tftypes.String, nil),
 		"refquota":      tftypes.NewValue(tftypes.String, nil),
@@ -2234,6 +2251,23 @@ func TestDatasetResource_Update_PermissionChange(t *testing.T) {
 
 	if setpermParams["mode"] != "700" {
 		t.Errorf("expected mode '700', got %v", setpermParams["mode"])
+	}
+}
+
+func TestDatasetResource_Schema_FullPathExists(t *testing.T) {
+	r := NewDatasetResource()
+
+	req := resource.SchemaRequest{}
+	resp := &resource.SchemaResponse{}
+
+	r.Schema(context.Background(), req, resp)
+
+	fullPathAttr, ok := resp.Schema.Attributes["full_path"]
+	if !ok {
+		t.Fatal("expected 'full_path' attribute in schema")
+	}
+	if !fullPathAttr.IsComputed() {
+		t.Error("expected 'full_path' attribute to be computed")
 	}
 }
 
