@@ -103,6 +103,28 @@ func TestNewTimeoutError(t *testing.T) {
 	}
 }
 
+func TestNewHostKeyError(t *testing.T) {
+	expected := "SHA256:expectedFingerprint123456789012345678901234"
+	actual := "SHA256:actualFingerprint9876543210987654321098765"
+	err := NewHostKeyError("truenas.local", expected, actual)
+
+	if err.Code != "EHOSTKEY" {
+		t.Errorf("expected code EHOSTKEY, got %s", err.Code)
+	}
+	if err.Suggestion == "" {
+		t.Error("expected suggestion for host key error")
+	}
+	if !strings.Contains(err.Message, "truenas.local") {
+		t.Error("expected message to contain host")
+	}
+	if !strings.Contains(err.Message, expected) {
+		t.Error("expected message to contain expected fingerprint")
+	}
+	if !strings.Contains(err.Message, actual) {
+		t.Error("expected message to contain actual fingerprint")
+	}
+}
+
 func TestTrueNASError_Error_Format(t *testing.T) {
 	err := &TrueNASError{
 		Code:       "EINVAL",

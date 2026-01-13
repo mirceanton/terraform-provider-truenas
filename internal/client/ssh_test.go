@@ -2,11 +2,16 @@ package client
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
 	"errors"
 	"testing"
 
 	"golang.org/x/crypto/ssh"
 )
+
+// testHostKeyFingerprint is a valid SHA256 fingerprint format for testing.
+const testHostKeyFingerprint = "SHA256:uL6HlVEzPRLQnJwO6l7F8VXNgJyiPXxrMIBqfq/8VKE"
 
 // mockDialer is a test double for sshDialer.
 type mockDialer struct {
@@ -85,6 +90,91 @@ AAAEARU6QyekrrGEM7eyo5JKVU08PPAbbO19sp/dB3xMSpaq3CzzM2uY1YPH6fFvbrMDaJ
 NVOfhNlDIrXIA2bReJrCAAAAEnRlc3RAZXhhbXBsZS5sb2NhbAECAw==
 -----END OPENSSH PRIVATE KEY-----`
 
+func TestVerifyHostKey_Match(t *testing.T) {
+	// Generate a test key
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("failed to generate RSA key: %v", err)
+	}
+	signer, err := ssh.NewSignerFromKey(key)
+	if err != nil {
+		t.Fatalf("failed to create signer: %v", err)
+	}
+	pubKey := signer.PublicKey()
+	expectedFingerprint := ssh.FingerprintSHA256(pubKey)
+
+	callback := verifyHostKey(expectedFingerprint)
+	err = callback("test-host", nil, pubKey)
+	if err != nil {
+		t.Errorf("expected no error for matching fingerprint, got: %v", err)
+	}
+}
+
+func TestVerifyHostKey_Mismatch(t *testing.T) {
+	// Generate a test key
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatalf("failed to generate RSA key: %v", err)
+	}
+	signer, err := ssh.NewSignerFromKey(key)
+	if err != nil {
+		t.Fatalf("failed to create signer: %v", err)
+	}
+	pubKey := signer.PublicKey()
+	actualFingerprint := ssh.FingerprintSHA256(pubKey)
+
+	// Use a different expected fingerprint
+	wrongFingerprint := "SHA256:wrongWrongWrongWrongWrongWrongWrongWrongWro"
+
+	callback := verifyHostKey(wrongFingerprint)
+	err = callback("test-host", nil, pubKey)
+	if err == nil {
+		t.Fatal("expected error for mismatched fingerprint")
+	}
+
+	// Verify error contains both expected and actual fingerprints
+	trueNASErr, ok := err.(*TrueNASError)
+	if !ok {
+		t.Fatalf("expected TrueNASError, got %T", err)
+	}
+	if trueNASErr.Code != "EHOSTKEY" {
+		t.Errorf("expected code EHOSTKEY, got %q", trueNASErr.Code)
+	}
+	if trueNASErr.Message == "" {
+		t.Error("expected error message to be non-empty")
+	}
+	// Check that the error message contains both fingerprints
+	if !containsAll(trueNASErr.Message, wrongFingerprint, actualFingerprint) {
+		t.Errorf("expected error message to contain both fingerprints, got: %s", trueNASErr.Message)
+	}
+}
+
+// containsAll checks if s contains all the given substrings.
+func containsAll(s string, substrings ...string) bool {
+	for _, sub := range substrings {
+		if !contains(s, sub) {
+			return false
+		}
+	}
+	return true
+}
+
+// contains checks if s contains sub.
+func contains(s, sub string) bool {
+	return len(s) >= len(sub) && (s == sub || len(sub) == 0 ||
+		(len(s) > 0 && len(sub) > 0 && findSubstring(s, sub)))
+}
+
+// findSubstring returns true if sub is found in s.
+func findSubstring(s, sub string) bool {
+	for i := 0; i <= len(s)-len(sub); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}
+
 func TestSSHConfig_Validate_MissingHost(t *testing.T) {
 	config := &SSHConfig{
 		Host:       "",
@@ -117,10 +207,28 @@ func TestSSHConfig_Validate_MissingPrivateKey(t *testing.T) {
 	}
 }
 
+func TestSSHConfig_Validate_MissingFingerprint(t *testing.T) {
+	config := &SSHConfig{
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: "",
+	}
+
+	err := config.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing host key fingerprint")
+	}
+
+	if err.Error() != "host_key_fingerprint is required" {
+		t.Errorf("expected 'host_key_fingerprint is required', got %q", err.Error())
+	}
+}
+
 func TestSSHConfig_Validate_Defaults(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	err := config.Validate()
@@ -139,10 +247,11 @@ func TestSSHConfig_Validate_Defaults(t *testing.T) {
 
 func TestSSHConfig_Validate_CustomValues(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		Port:       2222,
-		User:       "admin",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		Port:               2222,
+		User:               "admin",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	err := config.Validate()
@@ -179,8 +288,9 @@ func TestParsePrivateKey_ValidKey(t *testing.T) {
 
 func TestNewSSHClient_InvalidConfig(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "",
-		PrivateKey: testPrivateKey,
+		Host:               "",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	_, err := NewSSHClient(config)
@@ -191,8 +301,9 @@ func TestNewSSHClient_InvalidConfig(t *testing.T) {
 
 func TestNewSSHClient_ValidConfig(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, err := NewSSHClient(config)
@@ -215,8 +326,9 @@ func TestNewSSHClient_ValidConfig(t *testing.T) {
 
 func TestSSHClient_Connect_AlreadyConnected(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -231,8 +343,9 @@ func TestSSHClient_Connect_AlreadyConnected(t *testing.T) {
 
 func TestSSHClient_Connect_InvalidKey(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: "invalid key",
+		Host:               "truenas.local",
+		PrivateKey:         "invalid key",
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 	// Bypass validation for this test
 	config.Port = 22
@@ -251,8 +364,9 @@ func TestSSHClient_Connect_InvalidKey(t *testing.T) {
 
 func TestSSHClient_Connect_DialError(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -279,8 +393,9 @@ func TestSSHClient_Connect_DialError(t *testing.T) {
 
 func TestSSHClient_Connect_Success(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -310,8 +425,9 @@ func TestSSHClient_Connect_Success(t *testing.T) {
 
 func TestSSHClient_Call_ConnectFails(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -329,8 +445,9 @@ func TestSSHClient_Call_ConnectFails(t *testing.T) {
 
 func TestSSHClient_Call_WithoutParams(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -365,8 +482,9 @@ func TestSSHClient_Call_WithoutParams(t *testing.T) {
 
 func TestSSHClient_Call_WithParams(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -402,8 +520,9 @@ func TestSSHClient_Call_WithParams(t *testing.T) {
 
 func TestSSHClient_Call_SessionError(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -424,8 +543,9 @@ func TestSSHClient_Call_SessionError(t *testing.T) {
 
 func TestSSHClient_Call_OutputError(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -452,8 +572,9 @@ func TestSSHClient_Call_OutputError(t *testing.T) {
 
 func TestSSHClient_Call_ParamsMarshalError(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -474,8 +595,9 @@ func TestSSHClient_Call_ShellEscaping(t *testing.T) {
 	// This test verifies that shell metacharacters are properly escaped
 	// to prevent command injection attacks
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -555,8 +677,9 @@ func TestSSHClient_Call_ShellEscaping(t *testing.T) {
 
 func TestSSHClient_CallAndWait(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -594,8 +717,9 @@ func TestSSHClient_CallAndWait(t *testing.T) {
 
 func TestSSHClient_Close_NotConnected(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -609,8 +733,9 @@ func TestSSHClient_Close_NotConnected(t *testing.T) {
 
 func TestSSHClient_Close_Connected(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -642,8 +767,9 @@ func TestSSHClient_Close_Connected(t *testing.T) {
 
 func TestSSHClient_Close_Error(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -704,8 +830,9 @@ func TestSerializeParams_SliceWithError(t *testing.T) {
 
 func TestSSHClient_Call_PositionalArgs(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -738,8 +865,9 @@ func TestSSHClient_Call_PositionalArgs(t *testing.T) {
 
 func TestSSHClient_CallAndWait_PositionalArgs(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)

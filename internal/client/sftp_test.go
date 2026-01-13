@@ -188,8 +188,9 @@ func (m *mockSFTPFile) Close() error {
 
 func TestSSHClient_WriteFile_Success(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -231,8 +232,9 @@ func TestSSHClient_WriteFile_Success(t *testing.T) {
 
 func TestSSHClient_WriteFile_Error(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -269,8 +271,9 @@ func (m *mockFileInfo) Sys() any           { return nil }
 
 func TestSSHClient_ReadFile_Success(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -311,8 +314,9 @@ func TestSSHClient_ReadFile_Success(t *testing.T) {
 
 func TestSSHClient_ReadFile_NotFound(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -333,8 +337,9 @@ func TestSSHClient_ReadFile_NotFound(t *testing.T) {
 
 func TestSSHClient_DeleteFile_Success(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -369,8 +374,9 @@ func TestSSHClient_DeleteFile_Success(t *testing.T) {
 
 func TestSSHClient_DeleteFile_NotFound(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -395,8 +401,9 @@ func TestSSHClient_DeleteFile_NotFound(t *testing.T) {
 
 func TestSSHClient_FileExists_True(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -426,8 +433,9 @@ func TestSSHClient_FileExists_True(t *testing.T) {
 
 func TestSSHClient_FileExists_False(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -456,8 +464,9 @@ func TestSSHClient_FileExists_False(t *testing.T) {
 
 func TestSSHClient_MkdirAll_Success(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -492,8 +501,9 @@ func TestSSHClient_MkdirAll_Success(t *testing.T) {
 
 func TestSSHClient_MkdirAll_PermissionDenied(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -518,8 +528,9 @@ func TestSSHClient_MkdirAll_PermissionDenied(t *testing.T) {
 
 func TestSSHClient_MkdirAll_IncludesMode(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -552,8 +563,9 @@ func TestSSHClient_MkdirAll_IncludesMode(t *testing.T) {
 func TestSSHClient_ReadFile_PartialReads(t *testing.T) {
 	// Test that ReadFile handles partial reads correctly (large files)
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -605,8 +617,9 @@ func TestSSHClient_ReadFile_PartialReads(t *testing.T) {
 
 func TestSSHClient_RemoveDir_Success(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -641,8 +654,9 @@ func TestSSHClient_RemoveDir_Success(t *testing.T) {
 
 func TestSSHClient_RemoveDir_NotEmpty(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -667,8 +681,9 @@ func TestSSHClient_RemoveDir_NotEmpty(t *testing.T) {
 
 func TestSSHClient_RemoveDir_NotFound(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -693,8 +708,9 @@ func TestSSHClient_RemoveDir_NotFound(t *testing.T) {
 
 func TestSSHClient_RemoveAll_Success(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -729,8 +745,9 @@ func TestSSHClient_RemoveAll_Success(t *testing.T) {
 
 func TestSSHClient_RemoveAll_PermissionDenied(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -755,8 +772,9 @@ func TestSSHClient_RemoveAll_PermissionDenied(t *testing.T) {
 
 func TestSSHClient_Chown_Success(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
@@ -794,8 +812,9 @@ func TestSSHClient_Chown_Success(t *testing.T) {
 
 func TestSSHClient_Chown_PermissionDenied(t *testing.T) {
 	config := &SSHConfig{
-		Host:       "truenas.local",
-		PrivateKey: testPrivateKey,
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
 	}
 
 	client, _ := NewSSHClient(config)
