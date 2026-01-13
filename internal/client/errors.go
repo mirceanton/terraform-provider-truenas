@@ -102,3 +102,12 @@ func NewTimeoutError(jobID int64, duration string) *TrueNASError {
 		Suggestion: "Increase the timeout or check the TrueNAS server for issues.",
 	}
 }
+
+// NewHostKeyError creates an error for SSH host key verification failures.
+func NewHostKeyError(host string, expected, actual string) *TrueNASError {
+	return &TrueNASError{
+		Code:       "EHOSTKEY",
+		Message:    fmt.Sprintf("host key verification failed for %s: expected %s, got %s", host, expected, actual),
+		Suggestion: "Verify the fingerprint on your TrueNAS server: ssh-keygen -lvf /etc/ssh/ssh_host_rsa_key.pub",
+	}
+}

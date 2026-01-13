@@ -67,10 +67,7 @@ func verifyHostKey(expectedFingerprint string) ssh.HostKeyCallback {
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		fingerprint := ssh.FingerprintSHA256(key)
 		if fingerprint != expectedFingerprint {
-			return fmt.Errorf(
-				"host key verification failed for %s: expected %s, got %s",
-				hostname, expectedFingerprint, fingerprint,
-			)
+			return NewHostKeyError(hostname, expectedFingerprint, fingerprint)
 		}
 		return nil
 	}
