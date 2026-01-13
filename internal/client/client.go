@@ -15,7 +15,8 @@ type Client interface {
 	CallAndWait(ctx context.Context, method string, params any) (json.RawMessage, error)
 
 	// WriteFile writes content to a file on the remote system.
-	WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode) error
+	// uid and gid specify file ownership (-1 means unchanged).
+	WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error
 
 	// ReadFile reads the content of a file from the remote system.
 	ReadFile(ctx context.Context, path string) ([]byte, error)
@@ -49,7 +50,7 @@ type Client interface {
 type MockClient struct {
 	CallFunc           func(ctx context.Context, method string, params any) (json.RawMessage, error)
 	CallAndWaitFunc    func(ctx context.Context, method string, params any) (json.RawMessage, error)
-	WriteFileFunc      func(ctx context.Context, path string, content []byte, mode fs.FileMode) error
+	WriteFileFunc      func(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error
 	ReadFileFunc       func(ctx context.Context, path string) ([]byte, error)
 	DeleteFileFunc     func(ctx context.Context, path string) error
 	RemoveDirFunc      func(ctx context.Context, path string) error
@@ -75,9 +76,9 @@ func (m *MockClient) CallAndWait(ctx context.Context, method string, params any)
 	return nil, nil
 }
 
-func (m *MockClient) WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode) error {
+func (m *MockClient) WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error {
 	if m.WriteFileFunc != nil {
-		return m.WriteFileFunc(ctx, path, content, mode)
+		return m.WriteFileFunc(ctx, path, content, mode, uid, gid)
 	}
 	return nil
 }
