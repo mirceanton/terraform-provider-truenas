@@ -2271,6 +2271,61 @@ func TestDatasetResource_Schema_FullPathExists(t *testing.T) {
 	}
 }
 
+// Test Read populates both mount_path and full_path from API response
+func TestDatasetResource_Read_BothMountPathAndFullPath(t *testing.T) {
+	r := &DatasetResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[{
+					"id": "storage/apps",
+					"name": "storage/apps",
+					"mountpoint": "/mnt/storage/apps",
+					"compression": {"value": "lz4"},
+					"quota": {"value": "0"},
+					"refquota": {"value": "0"},
+					"atime": {"value": "on"}
+				}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getDatasetResourceSchema(t)
+	// Start with empty/null full_path to verify it gets populated from API
+	stateValue := createDatasetResourceModelFull("storage/apps", "storage", "apps", nil, nil, nil, nil, "lz4", nil, nil, nil, nil, nil, nil, nil)
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Read(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	var model DatasetResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+
+	if model.MountPath.ValueString() != "/mnt/storage/apps" {
+		t.Errorf("expected MountPath '/mnt/storage/apps', got %q", model.MountPath.ValueString())
+	}
+	if model.FullPath.ValueString() != "/mnt/storage/apps" {
+		t.Errorf("expected FullPath '/mnt/storage/apps', got %q", model.FullPath.ValueString())
+	}
+}
+
 // Test Read reads permissions from filesystem.stat
 func TestDatasetResource_Read_WithPermissions(t *testing.T) {
 	r := &DatasetResource{

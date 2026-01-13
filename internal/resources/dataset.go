@@ -98,6 +98,7 @@ func (r *DatasetResource) queryDataset(ctx context.Context, datasetID string) (*
 func mapDatasetToModel(ds *datasetQueryResponse, data *DatasetResourceModel) {
 	data.ID = types.StringValue(ds.ID)
 	data.MountPath = types.StringValue(ds.Mountpoint)
+	data.FullPath = types.StringValue(ds.Mountpoint)
 	data.Compression = types.StringValue(ds.Compression.Value)
 	data.Quota = types.StringValue(ds.Quota.Value)
 	data.RefQuota = types.StringValue(ds.RefQuota.Value)
