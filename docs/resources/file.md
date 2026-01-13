@@ -102,6 +102,7 @@ terraform import truenas_file.example /mnt/tank/apps/myapp/config.json
 
 ### Optional
 
+- `force_destroy` (Boolean) Change file ownership to root before deletion to handle permission issues from app containers.
 - `gid` (Number) Owner group ID. Inherits from host_path if not specified.
 - `host_path` (String) ID of a truenas_host_path resource. Mutually exclusive with 'path'.
 - `mode` (String) Unix mode (e.g., '0644'). Inherits from host_path if not specified.

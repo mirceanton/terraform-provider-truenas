@@ -3,12 +3,12 @@
 page_title: "truenas_dataset Resource - terraform-provider-truenas"
 subcategory: ""
 description: |-
-  Manages a TrueNAS dataset.
+  Manages a TrueNAS dataset. Use nested datasets instead of host_path for app storage.
 ---
 
 # truenas_dataset (Resource)
 
-Manages a TrueNAS dataset.
+Manages a TrueNAS dataset. Use nested datasets instead of host_path for app storage.
 
 
 
@@ -19,14 +19,19 @@ Manages a TrueNAS dataset.
 
 - `atime` (String) Access time tracking ('on' or 'off').
 - `compression` (String) Compression algorithm (e.g., 'lz4', 'zstd', 'off').
-- `name` (String) Dataset name. Use with 'parent' attribute.
-- `parent` (String) Parent dataset path (e.g., 'tank/data'). Use with 'name' attribute.
-- `path` (String) Dataset path within the pool. Use with 'pool' attribute.
-- `pool` (String) Pool name. Use with 'path' attribute.
+- `force_destroy` (Boolean) When destroying this resource, also delete all child datasets. Defaults to false.
+- `gid` (Number) Owner group ID for the dataset mountpoint.
+- `mode` (String) Unix mode for the dataset mountpoint (e.g., '755'). Sets permissions via filesystem.setperm after creation.
+- `name` (String, Deprecated) Dataset name. Use with 'parent' attribute.
+- `parent` (String) Parent dataset ID (e.g., 'tank/data'). Use with 'path' attribute.
+- `path` (String) Dataset path. With 'pool': relative path in pool. With 'parent': child dataset name.
+- `pool` (String) Pool name. Use with 'path' attribute for pool-relative paths.
 - `quota` (String) Dataset quota (e.g., '10G', '1T').
 - `refquota` (String) Dataset reference quota (e.g., '10G', '1T').
+- `uid` (Number) Owner user ID for the dataset mountpoint.
 
 ### Read-Only
 
+- `full_path` (String) Full filesystem path to the mounted dataset (e.g., '/mnt/tank/data').
 - `id` (String) Dataset identifier (pool/path).
-- `mount_path` (String) Filesystem mount path.
+- `mount_path` (String, Deprecated) Filesystem mount path.
