@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.3.0] - 2026-01-14
+
+
+### Added
+
+- **ssh:** Add MaxSessions field to SSHConfig
+- **ssh:** Add session semaphore to SSHClient
+- **ssh:** Add acquireSession helper method
+- **ssh:** Add semaphore to Call method
+- **ssh:** Add semaphore to CallAndWait method
+- **provider:** Add max_sessions configuration option
+- **ssh:** Add runSudoOutput and switch ReadFile to sudo cat
+
+### Documentation
+
+- Add SSH session semaphore design
+- Add SSH session semaphore implementation plan
+- Regenerate provider docs with max_sessions option
+- Add design for ReadFile sudo cat implementation
+
+### Fixed
+
+- **ssh:** Reduce default max_sessions from 10 to 5
+
 ## [0.2.1] - 2026-01-14
 
 
