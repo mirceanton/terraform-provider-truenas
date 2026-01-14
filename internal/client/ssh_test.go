@@ -5,7 +5,10 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 )
@@ -998,5 +1001,55 @@ func TestSSHClient_AcquireSession(t *testing.T) {
 	release2()
 	if len(client.sessionSem) != 0 {
 		t.Errorf("sessionSem should be empty after both releases, got %d", len(client.sessionSem))
+	}
+}
+
+func TestSSHClient_Call_RespectsSemaphore(t *testing.T) {
+	var activeCount int32
+	var maxActive int32
+
+	mockClient := &mockSSHClient{
+		newSessionFunc: func() (sshSession, error) {
+			current := atomic.AddInt32(&activeCount, 1)
+			// Track max concurrent
+			for {
+				old := atomic.LoadInt32(&maxActive)
+				if current <= old || atomic.CompareAndSwapInt32(&maxActive, old, current) {
+					break
+				}
+			}
+			return &mockSession{
+				combinedOutputFunc: func(cmd string) ([]byte, error) {
+					time.Sleep(50 * time.Millisecond) // Simulate work
+					return []byte(`{"result": "ok"}`), nil
+				},
+				closeFunc: func() error {
+					atomic.AddInt32(&activeCount, -1)
+					return nil
+				},
+			}, nil
+		},
+	}
+
+	client := &SSHClient{
+		config:        &SSHConfig{Host: "test", PrivateKey: testPrivateKey, HostKeyFingerprint: testHostKeyFingerprint},
+		clientWrapper: mockClient,
+		sessionSem:    make(chan struct{}, 2), // Limit to 2 concurrent
+	}
+
+	// Launch 5 concurrent calls
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = client.Call(context.Background(), "test.method", nil)
+		}()
+	}
+	wg.Wait()
+
+	// Max concurrent should never exceed semaphore limit
+	if atomic.LoadInt32(&maxActive) > 2 {
+		t.Errorf("max concurrent sessions = %d, want <= 2", maxActive)
 	}
 }

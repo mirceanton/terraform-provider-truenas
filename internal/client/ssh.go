@@ -291,6 +291,10 @@ func serializeParams(params any) (string, error) {
 // Note: The ctx parameter is accepted for interface compatibility and future
 // use (e.g., command cancellation, timeouts) but is not currently used.
 func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	// Acquire session slot (blocks if at limit)
+	release := c.acquireSession()
+	defer release()
+
 	// Ensure we're connected (only if not already mocked)
 	if c.clientWrapper == nil {
 		if err := c.connect(); err != nil {
