@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"net"
 	"regexp"
@@ -446,31 +445,11 @@ func (c *SSHClient) WriteFile(ctx context.Context, path string, content []byte, 
 
 // ReadFile reads the content of a file from the remote system.
 func (c *SSHClient) ReadFile(ctx context.Context, path string) ([]byte, error) {
-	// Acquire session slot (blocks if at limit)
-	release := c.acquireSession()
-	defer release()
-
-	// Connect SFTP if needed (skip if already mocked)
-	if c.sftpClient == nil {
-		if err := c.connectSFTP(); err != nil {
-			return nil, err
-		}
-	}
-
-	// Open the file
-	file, err := c.sftpClient.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %q: %w", path, err)
-	}
-	defer file.Close()
-
-	// Read all content - handles partial reads correctly
-	content, err := io.ReadAll(file)
+	output, err := c.runSudoOutput(ctx, "cat", path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file %q: %w", path, err)
 	}
-
-	return content, nil
+	return output, nil
 }
 
 // runSudo executes a command with sudo via SSH.
@@ -509,6 +488,36 @@ func (c *SSHClient) runSudo(ctx context.Context, args ...string) error {
 		return err
 	}
 	return nil
+}
+
+// runSudoOutput executes a command with sudo via SSH and returns stdout.
+func (c *SSHClient) runSudoOutput(ctx context.Context, args ...string) ([]byte, error) {
+	release := c.acquireSession()
+	defer release()
+
+	if c.clientWrapper == nil {
+		if err := c.connect(); err != nil {
+			return nil, err
+		}
+	}
+
+	var escaped []string
+	for _, arg := range args {
+		escaped = append(escaped, shellescape.Quote(arg))
+	}
+	cmd := "sudo " + strings.Join(escaped, " ")
+
+	session, err := c.clientWrapper.NewSession()
+	if err != nil {
+		return nil, err
+	}
+	defer session.Close()
+
+	output, err := session.Output(cmd)
+	if err != nil {
+		return nil, err
+	}
+	return output, nil
 }
 
 // DeleteFile removes a file from the remote system using sudo rm.

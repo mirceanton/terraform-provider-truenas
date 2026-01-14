@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
-	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1106,19 +1105,20 @@ func TestSSHClient_ReadFile_RespectsSemaphore(t *testing.T) {
 	var activeCount int32
 	var maxActive int32
 
-	mockSFTP := &mockSFTPClient{
-		openFunc: func(path string) (sftpFile, error) {
+	mockClient := &mockSSHClient{
+		newSessionFunc: func() (sshSession, error) {
 			current := atomic.AddInt32(&activeCount, 1)
+			// Track max concurrent
 			for {
 				old := atomic.LoadInt32(&maxActive)
 				if current <= old || atomic.CompareAndSwapInt32(&maxActive, old, current) {
 					break
 				}
 			}
-			return &mockSFTPFile{
-				readFunc: func(p []byte) (int, error) {
-					time.Sleep(50 * time.Millisecond)
-					return 0, io.EOF
+			return &mockSession{
+				outputFunc: func(cmd string) ([]byte, error) {
+					time.Sleep(50 * time.Millisecond) // Simulate work
+					return []byte("file content"), nil
 				},
 				closeFunc: func() error {
 					atomic.AddInt32(&activeCount, -1)
@@ -1129,9 +1129,9 @@ func TestSSHClient_ReadFile_RespectsSemaphore(t *testing.T) {
 	}
 
 	client := &SSHClient{
-		config:     &SSHConfig{Host: "test", PrivateKey: testPrivateKey, HostKeyFingerprint: testHostKeyFingerprint},
-		sftpClient: mockSFTP,
-		sessionSem: make(chan struct{}, 2),
+		config:        &SSHConfig{Host: "test", PrivateKey: testPrivateKey, HostKeyFingerprint: testHostKeyFingerprint},
+		clientWrapper: mockClient,
+		sessionSem:    make(chan struct{}, 2), // Limit to 2 concurrent
 	}
 
 	var wg sync.WaitGroup

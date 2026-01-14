@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"errors"
-	"io"
 	"io/fs"
 	"strings"
 	"testing"
@@ -279,28 +278,21 @@ func TestSSHClient_ReadFile_Success(t *testing.T) {
 	client, _ := NewSSHClient(config)
 
 	content := []byte("file content here")
-	readDone := false
-	mockFile := &mockSFTPFile{
-		readFunc: func(p []byte) (int, error) {
-			if readDone {
-				return 0, io.EOF
-			}
-			n := copy(p, content)
-			readDone = true
-			return n, nil
+	var capturedCmd string
+	mockSession := &mockSSHSession{
+		outputFunc: func(cmd string) ([]byte, error) {
+			capturedCmd = cmd
+			return content, nil
 		},
 	}
 
-	mockSFTP := &mockSFTPClient{
-		openFunc: func(path string) (sftpFile, error) {
-			if path != "/mnt/storage/test.txt" {
-				t.Errorf("expected path '/mnt/storage/test.txt', got %q", path)
-			}
-			return mockFile, nil
+	mockSSHClient := &mockSSHClientWrapper{
+		newSessionFunc: func() (sshSession, error) {
+			return mockSession, nil
 		},
 	}
 
-	client.sftpClient = mockSFTP
+	client.clientWrapper = mockSSHClient
 
 	result, err := client.ReadFile(context.Background(), "/mnt/storage/test.txt")
 	if err != nil {
@@ -309,6 +301,12 @@ func TestSSHClient_ReadFile_Success(t *testing.T) {
 
 	if string(result) != "file content here" {
 		t.Errorf("expected 'file content here', got %q", string(result))
+	}
+
+	// Verify the command uses sudo cat with the path
+	expectedCmd := "sudo cat /mnt/storage/test.txt"
+	if capturedCmd != expectedCmd {
+		t.Errorf("expected command %q, got %q", expectedCmd, capturedCmd)
 	}
 }
 
@@ -321,13 +319,19 @@ func TestSSHClient_ReadFile_NotFound(t *testing.T) {
 
 	client, _ := NewSSHClient(config)
 
-	mockSFTP := &mockSFTPClient{
-		openFunc: func(path string) (sftpFile, error) {
-			return nil, errors.New("file not found")
+	mockSession := &mockSSHSession{
+		outputFunc: func(cmd string) ([]byte, error) {
+			return nil, errors.New("cat: /mnt/storage/missing.txt: No such file or directory")
 		},
 	}
 
-	client.sftpClient = mockSFTP
+	mockSSHClient := &mockSSHClientWrapper{
+		newSessionFunc: func() (sshSession, error) {
+			return mockSession, nil
+		},
+	}
+
+	client.clientWrapper = mockSSHClient
 
 	_, err := client.ReadFile(context.Background(), "/mnt/storage/missing.txt")
 	if err == nil {
@@ -560,8 +564,8 @@ func TestSSHClient_MkdirAll_IncludesMode(t *testing.T) {
 	}
 }
 
-func TestSSHClient_ReadFile_PartialReads(t *testing.T) {
-	// Test that ReadFile handles partial reads correctly (large files)
+func TestSSHClient_ReadFile_LargeFile(t *testing.T) {
+	// Test that ReadFile handles large file content correctly
 	config := &SSHConfig{
 		Host:               "truenas.local",
 		PrivateKey:         testPrivateKey,
@@ -570,40 +574,22 @@ func TestSSHClient_ReadFile_PartialReads(t *testing.T) {
 
 	client, _ := NewSSHClient(config)
 
-	// Simulate a large file where Read returns partial data
+	// Simulate a large file content
 	fullContent := []byte("This is a large file that requires multiple reads to complete")
-	readOffset := 0
 
-	mockFile := &mockSFTPFile{
-		readFunc: func(p []byte) (int, error) {
-			// Simulate partial read - only return 10 bytes at a time
-			remaining := len(fullContent) - readOffset
-			if remaining == 0 {
-				return 0, io.EOF
-			}
-			chunkSize := 10
-			if chunkSize > remaining {
-				chunkSize = remaining
-			}
-			if chunkSize > len(p) {
-				chunkSize = len(p)
-			}
-			copy(p, fullContent[readOffset:readOffset+chunkSize])
-			readOffset += chunkSize
-			return chunkSize, nil
+	mockSession := &mockSSHSession{
+		outputFunc: func(cmd string) ([]byte, error) {
+			return fullContent, nil
 		},
 	}
 
-	mockSFTP := &mockSFTPClient{
-		openFunc: func(path string) (sftpFile, error) {
-			return mockFile, nil
-		},
-		statFunc: func(path string) (fs.FileInfo, error) {
-			return &mockFileInfo{size: int64(len(fullContent))}, nil
+	mockSSHClient := &mockSSHClientWrapper{
+		newSessionFunc: func() (sshSession, error) {
+			return mockSession, nil
 		},
 	}
 
-	client.sftpClient = mockSFTP
+	client.clientWrapper = mockSSHClient
 
 	result, err := client.ReadFile(context.Background(), "/mnt/storage/large.txt")
 	if err != nil {
