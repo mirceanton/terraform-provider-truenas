@@ -897,3 +897,33 @@ func TestSSHClient_CallAndWait_PositionalArgs(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestSSHConfig_Validate_MaxSessions(t *testing.T) {
+	tests := []struct {
+		name        string
+		maxSessions int
+	}{
+		{"zero is preserved", 0},       // Validate does not modify; NewSSHClient applies default
+		{"negative is preserved", -5},  // Validate does not modify; NewSSHClient applies default
+		{"positive is preserved", 25},  // positive values preserved as-is
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &SSHConfig{
+				Host:               "truenas.local",
+				PrivateKey:         testPrivateKey,
+				HostKeyFingerprint: testHostKeyFingerprint,
+				MaxSessions:        tt.maxSessions,
+			}
+			err := config.Validate()
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			// MaxSessions should be unchanged by Validate (defaulting happens in NewSSHClient)
+			if config.MaxSessions != tt.maxSessions {
+				t.Errorf("MaxSessions = %d, want %d", config.MaxSessions, tt.maxSessions)
+			}
+		})
+	}
+}

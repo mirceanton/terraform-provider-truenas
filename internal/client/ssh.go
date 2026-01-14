@@ -28,6 +28,7 @@ type SSHConfig struct {
 	User               string
 	PrivateKey         string
 	HostKeyFingerprint string
+	MaxSessions        int // Maximum concurrent SSH sessions (0 = default of 10)
 }
 
 // Validate validates the SSHConfig and sets defaults.
