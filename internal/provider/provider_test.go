@@ -232,6 +232,7 @@ func createTestConfigureRequest(t *testing.T, host, authMethod string, ssh *SSHB
 			"user":                 tftypes.String,
 			"private_key":          tftypes.String,
 			"host_key_fingerprint": tftypes.String,
+			"max_sessions":         tftypes.Number,
 		},
 	}
 	if ssh == nil {
@@ -265,11 +266,19 @@ func createTestConfigureRequest(t *testing.T, host, authMethod string, ssh *SSHB
 			hostKeyFingerprintValue = tftypes.NewValue(tftypes.String, ssh.HostKeyFingerprint.ValueString())
 		}
 
+		var maxSessionsValue tftypes.Value
+		if ssh.MaxSessions.IsNull() {
+			maxSessionsValue = tftypes.NewValue(tftypes.Number, nil)
+		} else {
+			maxSessionsValue = tftypes.NewValue(tftypes.Number, ssh.MaxSessions.ValueInt64())
+		}
+
 		sshValue = tftypes.NewValue(sshObjectType, map[string]tftypes.Value{
 			"port":                 portValue,
 			"user":                 userValue,
 			"private_key":          privateKeyValue,
 			"host_key_fingerprint": hostKeyFingerprintValue,
+			"max_sessions":         maxSessionsValue,
 		})
 	}
 
@@ -308,6 +317,7 @@ func TestProvider_Configure_InvalidAuthMethod(t *testing.T) {
 		User:               types.StringNull(),
 		PrivateKey:         types.StringValue(testPrivateKey),
 		HostKeyFingerprint: types.StringValue(testHostKeyFingerprint),
+		MaxSessions:        types.Int64Null(),
 	}
 
 	req := createTestConfigureRequest(t, "truenas.local", "api", ssh)
@@ -353,6 +363,7 @@ func TestProvider_Configure_Success(t *testing.T) {
 		User:               types.StringNull(),
 		PrivateKey:         types.StringValue(testPrivateKey),
 		HostKeyFingerprint: types.StringValue(testHostKeyFingerprint),
+		MaxSessions:        types.Int64Null(),
 	}
 
 	req := createTestConfigureRequest(t, "truenas.local", "ssh", ssh)
@@ -381,6 +392,7 @@ func TestProvider_Configure_WithCustomPortAndUser(t *testing.T) {
 		User:               types.StringValue("admin"),
 		PrivateKey:         types.StringValue(testPrivateKey),
 		HostKeyFingerprint: types.StringValue(testHostKeyFingerprint),
+		MaxSessions:        types.Int64Null(),
 	}
 
 	req := createTestConfigureRequest(t, "truenas.local", "ssh", ssh)
@@ -408,6 +420,7 @@ func TestProvider_Configure_ConfigParseError(t *testing.T) {
 			"user":                 tftypes.String,
 			"private_key":          tftypes.String,
 			"host_key_fingerprint": tftypes.String,
+			"max_sessions":         tftypes.Number,
 		},
 	}
 	invalidConfigValue := tftypes.NewValue(tftypes.Object{
@@ -424,6 +437,7 @@ func TestProvider_Configure_ConfigParseError(t *testing.T) {
 			"user":                 tftypes.NewValue(tftypes.String, nil),
 			"private_key":          tftypes.NewValue(tftypes.String, testPrivateKey),
 			"host_key_fingerprint": tftypes.NewValue(tftypes.String, testHostKeyFingerprint),
+			"max_sessions":         tftypes.NewValue(tftypes.Number, nil),
 		}),
 	})
 
@@ -462,6 +476,7 @@ func TestProvider_Configure_InvalidSSHClient(t *testing.T) {
 			"user":                 tftypes.String,
 			"private_key":          tftypes.String,
 			"host_key_fingerprint": tftypes.String,
+			"max_sessions":         tftypes.Number,
 		},
 	}
 	configValue := tftypes.NewValue(tftypes.Object{
@@ -478,6 +493,7 @@ func TestProvider_Configure_InvalidSSHClient(t *testing.T) {
 			"user":                 tftypes.NewValue(tftypes.String, nil),
 			"private_key":          tftypes.NewValue(tftypes.String, ""), // Empty private key
 			"host_key_fingerprint": tftypes.NewValue(tftypes.String, testHostKeyFingerprint),
+			"max_sessions":         tftypes.NewValue(tftypes.Number, nil),
 		}),
 	})
 

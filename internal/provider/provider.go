@@ -28,6 +28,7 @@ type SSHBlockModel struct {
 	User               types.String `tfsdk:"user"`
 	PrivateKey         types.String `tfsdk:"private_key"`
 	HostKeyFingerprint types.String `tfsdk:"host_key_fingerprint"`
+	MaxSessions        types.Int64  `tfsdk:"max_sessions"`
 }
 
 type TrueNASProvider struct {
@@ -83,6 +84,11 @@ func (p *TrueNASProvider) Schema(ctx context.Context, req provider.SchemaRequest
 						Required:  true,
 						Sensitive: false,
 					},
+					"max_sessions": schema.Int64Attribute{
+						Description: "Maximum concurrent SSH sessions. Defaults to 10. " +
+							"Increase for large deployments, decrease if you see connection errors.",
+						Optional: true,
+					},
 				},
 			},
 		},
@@ -129,6 +135,9 @@ func (p *TrueNASProvider) Configure(ctx context.Context, req provider.ConfigureR
 	}
 	if !config.SSH.User.IsNull() {
 		sshConfig.User = config.SSH.User.ValueString()
+	}
+	if !config.SSH.MaxSessions.IsNull() {
+		sshConfig.MaxSessions = int(config.SSH.MaxSessions.ValueInt64())
 	}
 
 	// Create SSH client (validates config and applies defaults)
