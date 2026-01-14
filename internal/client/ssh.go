@@ -335,6 +335,10 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 // Note: The response is not parsed as it contains unparseable progress output.
 // Callers should query the resource state separately after this returns.
 func (c *SSHClient) CallAndWait(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	// Acquire session slot (blocks if at limit)
+	release := c.acquireSession()
+	defer release()
+
 	// Ensure we're connected (only if not already mocked)
 	if c.clientWrapper == nil {
 		if err := c.connect(); err != nil {
@@ -442,6 +446,10 @@ func (c *SSHClient) WriteFile(ctx context.Context, path string, content []byte, 
 
 // ReadFile reads the content of a file from the remote system.
 func (c *SSHClient) ReadFile(ctx context.Context, path string) ([]byte, error) {
+	// Acquire session slot (blocks if at limit)
+	release := c.acquireSession()
+	defer release()
+
 	// Connect SFTP if needed (skip if already mocked)
 	if c.sftpClient == nil {
 		if err := c.connectSFTP(); err != nil {
@@ -467,6 +475,10 @@ func (c *SSHClient) ReadFile(ctx context.Context, path string) ([]byte, error) {
 
 // runSudo executes a command with sudo via SSH.
 func (c *SSHClient) runSudo(ctx context.Context, args ...string) error {
+	// Acquire session slot (blocks if at limit)
+	release := c.acquireSession()
+	defer release()
+
 	// Ensure we're connected (only if not already mocked)
 	if c.clientWrapper == nil {
 		if err := c.connect(); err != nil {

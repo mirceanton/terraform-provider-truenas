@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
+	"io"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1049,6 +1050,100 @@ func TestSSHClient_Call_RespectsSemaphore(t *testing.T) {
 	wg.Wait()
 
 	// Max concurrent should never exceed semaphore limit
+	if atomic.LoadInt32(&maxActive) > 2 {
+		t.Errorf("max concurrent sessions = %d, want <= 2", maxActive)
+	}
+}
+
+func TestSSHClient_CallAndWait_RespectsSemaphore(t *testing.T) {
+	var activeCount int32
+	var maxActive int32
+
+	mockClient := &mockSSHClient{
+		newSessionFunc: func() (sshSession, error) {
+			current := atomic.AddInt32(&activeCount, 1)
+			for {
+				old := atomic.LoadInt32(&maxActive)
+				if current <= old || atomic.CompareAndSwapInt32(&maxActive, old, current) {
+					break
+				}
+			}
+			return &mockSession{
+				combinedOutputFunc: func(cmd string) ([]byte, error) {
+					time.Sleep(50 * time.Millisecond)
+					return []byte(`{}`), nil
+				},
+				closeFunc: func() error {
+					atomic.AddInt32(&activeCount, -1)
+					return nil
+				},
+			}, nil
+		},
+	}
+
+	client := &SSHClient{
+		config:        &SSHConfig{Host: "test", PrivateKey: testPrivateKey, HostKeyFingerprint: testHostKeyFingerprint},
+		clientWrapper: mockClient,
+		sessionSem:    make(chan struct{}, 2),
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = client.CallAndWait(context.Background(), "test.method", nil)
+		}()
+	}
+	wg.Wait()
+
+	if atomic.LoadInt32(&maxActive) > 2 {
+		t.Errorf("max concurrent sessions = %d, want <= 2", maxActive)
+	}
+}
+
+func TestSSHClient_ReadFile_RespectsSemaphore(t *testing.T) {
+	var activeCount int32
+	var maxActive int32
+
+	mockSFTP := &mockSFTPClient{
+		openFunc: func(path string) (sftpFile, error) {
+			current := atomic.AddInt32(&activeCount, 1)
+			for {
+				old := atomic.LoadInt32(&maxActive)
+				if current <= old || atomic.CompareAndSwapInt32(&maxActive, old, current) {
+					break
+				}
+			}
+			return &mockSFTPFile{
+				readFunc: func(p []byte) (int, error) {
+					time.Sleep(50 * time.Millisecond)
+					return 0, io.EOF
+				},
+				closeFunc: func() error {
+					atomic.AddInt32(&activeCount, -1)
+					return nil
+				},
+			}, nil
+		},
+	}
+
+	client := &SSHClient{
+		config:     &SSHConfig{Host: "test", PrivateKey: testPrivateKey, HostKeyFingerprint: testHostKeyFingerprint},
+		sftpClient: mockSFTP,
+		sessionSem: make(chan struct{}, 2),
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _ = client.ReadFile(context.Background(), "/test/file")
+		}()
+	}
+	wg.Wait()
+
 	if atomic.LoadInt32(&maxActive) > 2 {
 		t.Errorf("max concurrent sessions = %d, want <= 2", maxActive)
 	}
