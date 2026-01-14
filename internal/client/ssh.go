@@ -192,6 +192,7 @@ type SSHClient struct {
 	sftpClient    sftpClient
 	dialer        sshDialer
 	mu            sync.Mutex
+	sessionSem    chan struct{} // limits concurrent SSH sessions
 }
 
 // Compile-time check that SSHClient implements Client.
@@ -203,9 +204,15 @@ func NewSSHClient(config *SSHConfig) (*SSHClient, error) {
 		return nil, err
 	}
 
+	maxSessions := config.MaxSessions
+	if maxSessions <= 0 {
+		maxSessions = 10 // default
+	}
+
 	return &SSHClient{
-		config: config,
-		dialer: &defaultDialer{},
+		config:     config,
+		dialer:     &defaultDialer{},
+		sessionSem: make(chan struct{}, maxSessions),
 	}, nil
 }
 

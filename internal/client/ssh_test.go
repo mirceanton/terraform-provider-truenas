@@ -927,3 +927,34 @@ func TestSSHConfig_Validate_MaxSessions(t *testing.T) {
 		})
 	}
 }
+
+func TestNewSSHClient_SessionSemaphore(t *testing.T) {
+	tests := []struct {
+		name             string
+		maxSessions      int
+		wantSemaphoreCap int
+	}{
+		{"default when zero", 0, 10},
+		{"default when negative", -5, 10},
+		{"custom value", 25, 25},
+		{"small value", 3, 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &SSHConfig{
+				Host:               "truenas.local",
+				PrivateKey:         testPrivateKey,
+				HostKeyFingerprint: testHostKeyFingerprint,
+				MaxSessions:        tt.maxSessions,
+			}
+			client, err := NewSSHClient(config)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if cap(client.sessionSem) != tt.wantSemaphoreCap {
+				t.Errorf("sessionSem capacity = %d, want %d", cap(client.sessionSem), tt.wantSemaphoreCap)
+			}
+		})
+	}
+}
