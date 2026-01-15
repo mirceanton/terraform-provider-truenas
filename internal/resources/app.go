@@ -7,11 +7,16 @@ import (
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	customtypes "github.com/deevus/terraform-provider-truenas/internal/types"
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64default"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"gopkg.in/yaml.v3"
 )
@@ -28,11 +33,13 @@ type AppResource struct {
 // AppResourceModel describes the resource data model.
 // Simplified for custom Docker Compose apps only.
 type AppResourceModel struct {
-	ID            types.String              `tfsdk:"id"`
-	Name          types.String              `tfsdk:"name"`
-	CustomApp     types.Bool                `tfsdk:"custom_app"`
+	ID            types.String                `tfsdk:"id"`
+	Name          types.String                `tfsdk:"name"`
+	CustomApp     types.Bool                  `tfsdk:"custom_app"`
 	ComposeConfig customtypes.YAMLStringValue `tfsdk:"compose_config"`
-	State         types.String              `tfsdk:"state"`
+	DesiredState  types.String                `tfsdk:"desired_state"`
+	StateTimeout  types.Int64                 `tfsdk:"state_timeout"`
+	State         types.String                `tfsdk:"state"`
 }
 
 // appAPIResponse represents the JSON response from app API calls.
@@ -84,6 +91,29 @@ func (r *AppResource) Schema(ctx context.Context, req resource.SchemaRequest, re
 				Description: "Docker Compose YAML configuration string (required for custom apps).",
 				Optional:    true,
 				CustomType:  customtypes.YAMLStringType{},
+			},
+			"desired_state": schema.StringAttribute{
+				Description: "Desired application state: 'running' or 'stopped' (case-insensitive). Defaults to 'RUNNING'.",
+				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString("RUNNING"),
+				PlanModifiers: []planmodifier.String{
+					caseInsensitiveStatePlanModifier(),
+				},
+				Validators: []validator.String{
+					stringvalidator.Any(
+						stringvalidator.OneOfCaseInsensitive("running", "stopped"),
+					),
+				},
+			},
+			"state_timeout": schema.Int64Attribute{
+				Description: "Timeout in seconds to wait for state transitions. Defaults to 120. Range: 30-600.",
+				Optional:    true,
+				Computed:    true,
+				Default:     int64default.StaticInt64(120),
+				Validators: []validator.Int64{
+					int64validator.Between(30, 600),
+				},
 			},
 			"state": schema.StringAttribute{
 				Description: "Application state (RUNNING, STOPPED, etc.).",

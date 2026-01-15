@@ -173,6 +173,8 @@ func createAppResourceModelValue(
 	id, name interface{},
 	customApp interface{},
 	composeConfig interface{},
+	desiredState interface{},
+	stateTimeout interface{},
 	state interface{},
 ) tftypes.Value {
 	return tftypes.NewValue(tftypes.Object{
@@ -181,6 +183,8 @@ func createAppResourceModelValue(
 			"name":           tftypes.String,
 			"custom_app":     tftypes.Bool,
 			"compose_config": tftypes.String,
+			"desired_state":  tftypes.String,
+			"state_timeout":  tftypes.Number,
 			"state":          tftypes.String,
 		},
 	}, map[string]tftypes.Value{
@@ -188,6 +192,8 @@ func createAppResourceModelValue(
 		"name":           tftypes.NewValue(tftypes.String, name),
 		"custom_app":     tftypes.NewValue(tftypes.Bool, customApp),
 		"compose_config": tftypes.NewValue(tftypes.String, composeConfig),
+		"desired_state":  tftypes.NewValue(tftypes.String, desiredState),
+		"state_timeout":  tftypes.NewValue(tftypes.Number, stateTimeout),
 		"state":          tftypes.NewValue(tftypes.String, state),
 	})
 }
@@ -216,7 +222,7 @@ func TestAppResource_Create_Success(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	planValue := createAppResourceModelValue(nil, "myapp", true, nil, nil)
+	planValue := createAppResourceModelValue(nil, "myapp", true, nil, "RUNNING", float64(120), nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -295,7 +301,7 @@ func TestAppResource_Create_WithComposeConfig(t *testing.T) {
 	schemaResp := getAppResourceSchema(t)
 
 	composeYAML := "version: '3'\nservices:\n  web:\n    image: nginx"
-	planValue := createAppResourceModelValue(nil, "myapp", true, composeYAML, nil)
+	planValue := createAppResourceModelValue(nil, "myapp", true, composeYAML, "RUNNING", float64(120), nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -338,7 +344,7 @@ func TestAppResource_Create_APIError(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	planValue := createAppResourceModelValue(nil, "myapp", true, nil, nil)
+	planValue := createAppResourceModelValue(nil, "myapp", true, nil, "RUNNING", float64(120), nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -386,7 +392,7 @@ func TestAppResource_Read_Success(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED")
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "STOPPED")
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -448,7 +454,7 @@ func TestAppResource_Read_NotFound(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING")
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "RUNNING")
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -487,7 +493,7 @@ func TestAppResource_Read_APIError(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING")
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "RUNNING")
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -536,11 +542,11 @@ func TestAppResource_Update_Success(t *testing.T) {
 	schemaResp := getAppResourceSchema(t)
 
 	// Current state
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED")
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "STOPPED")
 
 	// Plan with new compose config
 	composeYAML := "version: '3'\nservices:\n  web:\n    image: nginx:latest"
-	planValue := createAppResourceModelValue("myapp", "myapp", true, composeYAML, nil)
+	planValue := createAppResourceModelValue("myapp", "myapp", true, composeYAML, "RUNNING", float64(120), nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -601,8 +607,8 @@ func TestAppResource_Update_APIError(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED")
-	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", nil)
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "STOPPED")
+	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", "RUNNING", float64(120), nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -644,7 +650,7 @@ func TestAppResource_Delete_Success(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING")
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "RUNNING")
 
 	req := resource.DeleteRequest{
 		State: tfsdk.State{
@@ -687,7 +693,7 @@ func TestAppResource_Delete_APIError(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING")
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "RUNNING")
 
 	req := resource.DeleteRequest{
 		State: tfsdk.State{
@@ -715,7 +721,7 @@ func TestAppResource_ImportState(t *testing.T) {
 	schemaResp := getAppResourceSchema(t)
 
 	// Create an initial empty state with the correct schema
-	emptyState := createAppResourceModelValue(nil, nil, nil, nil, nil)
+	emptyState := createAppResourceModelValue(nil, nil, nil, nil, nil, nil, nil)
 
 	req := resource.ImportStateRequest{
 		ID: "imported-app",
@@ -771,7 +777,7 @@ func TestAppResource_Read_InvalidJSONResponse(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING")
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "RUNNING")
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -805,7 +811,7 @@ func TestAppResource_Create_InvalidJSONResponse(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	planValue := createAppResourceModelValue(nil, "myapp", true, nil, nil)
+	planValue := createAppResourceModelValue(nil, "myapp", true, nil, "RUNNING", float64(120), nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -839,8 +845,8 @@ func TestAppResource_Update_InvalidJSONResponse(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED")
-	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", nil)
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "STOPPED")
+	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", "RUNNING", float64(120), nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -884,7 +890,7 @@ func TestAppResource_Read_EmptyComposeConfigSetsNull(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, "old config", "STOPPED")
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, "old config", "RUNNING", float64(120), "STOPPED")
 
 	req := resource.ReadRequest{
 		State: tfsdk.State{
@@ -937,7 +943,7 @@ func TestAppResource_Create_QueryErrorAfterCreate(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	planValue := createAppResourceModelValue(nil, "myapp", true, nil, nil)
+	planValue := createAppResourceModelValue(nil, "myapp", true, nil, "RUNNING", float64(120), nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -974,7 +980,7 @@ func TestAppResource_Create_AppNotFoundAfterCreate(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	planValue := createAppResourceModelValue(nil, "myapp", true, nil, nil)
+	planValue := createAppResourceModelValue(nil, "myapp", true, nil, "RUNNING", float64(120), nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -1011,8 +1017,8 @@ func TestAppResource_Update_QueryErrorAfterUpdate(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED")
-	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", nil)
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "STOPPED")
+	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", "RUNNING", float64(120), nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -1053,8 +1059,8 @@ func TestAppResource_Update_AppNotFoundAfterUpdate(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED")
-	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", nil)
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "STOPPED")
+	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", "RUNNING", float64(120), nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -1095,8 +1101,8 @@ func TestAppResource_Update_QueryInvalidJSONResponse(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED")
-	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", nil)
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "STOPPED")
+	planValue := createAppResourceModelValue("myapp", "myapp", true, "new: config", "RUNNING", float64(120), nil)
 
 	req := resource.UpdateRequest{
 		State: tfsdk.State{
@@ -1137,7 +1143,7 @@ func TestAppResource_Create_QueryInvalidJSONResponse(t *testing.T) {
 
 	schemaResp := getAppResourceSchema(t)
 
-	planValue := createAppResourceModelValue(nil, "myapp", true, nil, nil)
+	planValue := createAppResourceModelValue(nil, "myapp", true, nil, "RUNNING", float64(120), nil)
 
 	req := resource.CreateRequest{
 		Plan: tfsdk.Plan{
@@ -1156,6 +1162,33 @@ func TestAppResource_Create_QueryInvalidJSONResponse(t *testing.T) {
 
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected error for invalid JSON response from query")
+	}
+}
+
+func TestAppResource_Schema_DesiredStateAttribute(t *testing.T) {
+	r := NewAppResource()
+
+	req := resource.SchemaRequest{}
+	resp := &resource.SchemaResponse{}
+
+	r.Schema(context.Background(), req, resp)
+
+	// Verify desired_state attribute exists and is optional
+	desiredStateAttr, ok := resp.Schema.Attributes["desired_state"]
+	if !ok {
+		t.Fatal("expected 'desired_state' attribute in schema")
+	}
+	if !desiredStateAttr.IsOptional() {
+		t.Error("expected 'desired_state' attribute to be optional")
+	}
+
+	// Verify state_timeout attribute exists and is optional
+	stateTimeoutAttr, ok := resp.Schema.Attributes["state_timeout"]
+	if !ok {
+		t.Fatal("expected 'state_timeout' attribute in schema")
+	}
+	if !stateTimeoutAttr.IsOptional() {
+		t.Error("expected 'state_timeout' attribute to be optional")
 	}
 }
 
@@ -1183,7 +1216,7 @@ func TestAppResource_ImportState_FollowedByRead(t *testing.T) {
 	schemaResp := getAppResourceSchema(t)
 
 	// Step 1: Import state
-	emptyState := createAppResourceModelValue(nil, nil, nil, nil, nil)
+	emptyState := createAppResourceModelValue(nil, nil, nil, nil, nil, nil, nil)
 
 	importReq := resource.ImportStateRequest{
 		ID: "imported-app",
