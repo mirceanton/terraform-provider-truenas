@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.4.0] - 2026-01-15
+
+
+### Added
+
+- **app:** Add state constants and normalization helper
+- **app:** Add isStableState and isValidDesiredState helpers
+- **app:** Add case-insensitive state plan modifier
+- **app:** Add desired_state and state_timeout schema attributes
+- **app:** Add waitForStableState polling helper
+- **app:** Add queryAppState helper method
+- **app:** Add reconcileDesiredState method
+- **app:** Handle desired_state in Create lifecycle
+- **app:** Handle desired_state reconciliation in Update lifecycle
+- **app:** Preserve desired_state in Read lifecycle
+- Add job logs excerpt to error reporting
+
+### Documentation
+
+- Add design for desired_state attribute on truenas_app
+- Add implementation plan for desired_state attribute
+- Add desired_state and state_timeout to app resource docs
+
+### Testing
+
+- **app:** Add CRASHED state handling tests
+- Expand test coverage for edge cases and error handling
+- Add comprehensive tests for TrueNAS job logs excerpt handling
+
+### Build
+
+- Enable git-cliff for automated changelog generation
+
 ## [0.3.0] - 2026-01-14
 
 
