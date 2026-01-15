@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	customtypes "github.com/deevus/terraform-provider-truenas/internal/types"
@@ -418,5 +419,65 @@ func (r *AppResource) queryAppState(ctx context.Context, name string) (string, e
 	}
 
 	return apps[0].State, nil
+}
+
+// reconcileDesiredState ensures the app is in the desired state.
+// It calls app.start or app.stop as needed and waits for the state to stabilize.
+// Returns an error if the reconciliation fails.
+func (r *AppResource) reconcileDesiredState(
+	ctx context.Context,
+	name string,
+	currentState string,
+	desiredState string,
+	timeout time.Duration,
+	resp *resource.UpdateResponse,
+) error {
+	normalizedDesired := normalizeDesiredState(desiredState)
+
+	// Check if reconciliation is needed
+	if currentState == normalizedDesired {
+		return nil
+	}
+
+	// Add warning about drift
+	resp.Diagnostics.AddWarning(
+		"App state was externally changed",
+		fmt.Sprintf(
+			"The app %q was found in state %s but desired_state is %s. "+
+				"Reconciling to desired state. To stop this app intentionally, set desired_state = \"stopped\".",
+			name, currentState, normalizedDesired,
+		),
+	)
+
+	// Determine which action to take
+	var method string
+	if normalizedDesired == AppStateRunning {
+		method = "app.start"
+	} else {
+		method = "app.stop"
+	}
+
+	// Call the API
+	_, err := r.client.CallAndWait(ctx, method, name)
+	if err != nil {
+		return fmt.Errorf("failed to %s app %q: %w", method, name, err)
+	}
+
+	// Wait for stable state
+	queryFunc := func(ctx context.Context, n string) (string, error) {
+		return r.queryAppState(ctx, n)
+	}
+
+	finalState, err := waitForStableState(ctx, name, timeout, queryFunc)
+	if err != nil {
+		return err
+	}
+
+	// Verify we reached the desired state
+	if finalState != normalizedDesired {
+		return fmt.Errorf("app %q reached state %s instead of desired %s", name, finalState, normalizedDesired)
+	}
+
+	return nil
 }
 

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	customtypes "github.com/deevus/terraform-provider-truenas/internal/types"
@@ -1345,5 +1346,92 @@ func TestAppResource_ImportState_FollowedByRead(t *testing.T) {
 	composeConfig := model.ComposeConfig.ValueString()
 	if !strings.Contains(composeConfig, "version:") || !strings.Contains(composeConfig, "\"3\"") {
 		t.Errorf("expected compose_config to contain version: 3, got %q", composeConfig)
+	}
+}
+
+func TestAppResource_reconcileDesiredState_StartApp(t *testing.T) {
+	var calledMethod string
+	r := &AppResource{
+		client: &client.MockClient{
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				calledMethod = method
+				return nil, nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[{"name": "myapp", "state": "RUNNING"}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getAppResourceSchema(t)
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+	err := r.reconcileDesiredState(context.Background(), "myapp", "STOPPED", "RUNNING", 30*time.Second, resp)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calledMethod != "app.start" {
+		t.Errorf("expected app.start to be called, got %q", calledMethod)
+	}
+}
+
+func TestAppResource_reconcileDesiredState_StopApp(t *testing.T) {
+	var calledMethod string
+	r := &AppResource{
+		client: &client.MockClient{
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				calledMethod = method
+				return nil, nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[{"name": "myapp", "state": "STOPPED"}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getAppResourceSchema(t)
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+	err := r.reconcileDesiredState(context.Background(), "myapp", "RUNNING", "STOPPED", 30*time.Second, resp)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if calledMethod != "app.stop" {
+		t.Errorf("expected app.stop to be called, got %q", calledMethod)
+	}
+}
+
+func TestAppResource_reconcileDesiredState_NoChangeNeeded(t *testing.T) {
+	callCount := 0
+	r := &AppResource{
+		client: &client.MockClient{
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callCount++
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getAppResourceSchema(t)
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+	err := r.reconcileDesiredState(context.Background(), "myapp", "RUNNING", "RUNNING", 30*time.Second, resp)
+
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if callCount != 0 {
+		t.Errorf("expected no API calls when state matches, got %d calls", callCount)
 	}
 }
