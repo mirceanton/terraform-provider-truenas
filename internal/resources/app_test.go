@@ -1435,3 +1435,67 @@ func TestAppResource_reconcileDesiredState_NoChangeNeeded(t *testing.T) {
 		t.Errorf("expected no API calls when state matches, got %d calls", callCount)
 	}
 }
+
+func TestAppResource_Create_WithDesiredStateStopped(t *testing.T) {
+	var methods []string
+	r := &AppResource{
+		client: &client.MockClient{
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				methods = append(methods, method)
+				return nil, nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				// Return RUNNING initially, then STOPPED after stop is called
+				if len(methods) == 1 {
+					return json.RawMessage(`[{"name": "myapp", "state": "RUNNING"}]`), nil
+				}
+				return json.RawMessage(`[{"name": "myapp", "state": "STOPPED"}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getAppResourceSchema(t)
+
+	// Plan with desired_state = "stopped"
+	planValue := createAppResourceModelValue(nil, "myapp", true, nil, "stopped", float64(120), nil)
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify app.create was called, then app.stop
+	if len(methods) < 2 {
+		t.Fatalf("expected at least 2 API calls, got %d: %v", len(methods), methods)
+	}
+	if methods[0] != "app.create" {
+		t.Errorf("expected first call to be app.create, got %q", methods[0])
+	}
+	if methods[1] != "app.stop" {
+		t.Errorf("expected second call to be app.stop, got %q", methods[1])
+	}
+
+	// Verify final state
+	var model AppResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+	if model.State.ValueString() != "STOPPED" {
+		t.Errorf("expected final state STOPPED, got %q", model.State.ValueString())
+	}
+}

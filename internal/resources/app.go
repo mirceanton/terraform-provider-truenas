@@ -199,6 +199,56 @@ func (r *AppResource) Create(ctx context.Context, req resource.CreateRequest, re
 	data.ID = types.StringValue(app.Name)
 	data.State = types.StringValue(app.State)
 
+	// Handle desired_state - if user wants STOPPED but app started as RUNNING
+	desiredState := data.DesiredState.ValueString()
+	if desiredState == "" {
+		desiredState = AppStateRunning
+	}
+	normalizedDesired := normalizeDesiredState(desiredState)
+
+	if app.State != normalizedDesired {
+		timeout := time.Duration(data.StateTimeout.ValueInt64()) * time.Second
+		if timeout == 0 {
+			timeout = 120 * time.Second
+		}
+
+		// For Create, we don't warn about drift - it's expected that we may need to stop
+		var method string
+		if normalizedDesired == AppStateRunning {
+			method = "app.start"
+		} else {
+			method = "app.stop"
+		}
+
+		_, err := r.client.CallAndWait(ctx, method, appName)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Set App State",
+				fmt.Sprintf("Unable to %s app %q: %s", method, appName, err.Error()),
+			)
+			return
+		}
+
+		// Wait for stable state and query final state
+		queryFunc := func(ctx context.Context, n string) (string, error) {
+			return r.queryAppState(ctx, n)
+		}
+
+		finalState, err := waitForStableState(ctx, appName, timeout, queryFunc)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Timeout Waiting for App State",
+				err.Error(),
+			)
+			return
+		}
+
+		data.State = types.StringValue(finalState)
+	}
+
+	// Ensure desired_state is normalized in state
+	data.DesiredState = types.StringValue(normalizedDesired)
+
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
