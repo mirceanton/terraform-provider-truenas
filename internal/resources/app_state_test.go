@@ -22,3 +22,47 @@ func TestNormalizeDesiredState(t *testing.T) {
 		}
 	}
 }
+
+func TestIsStableState(t *testing.T) {
+	tests := []struct {
+		state    string
+		expected bool
+	}{
+		{AppStateRunning, true},
+		{AppStateStopped, true},
+		{AppStateCrashed, true},
+		{AppStateDeploying, false},
+		{AppStateStarting, false},
+		{AppStateStopping, false},
+		{"UNKNOWN", false},
+	}
+
+	for _, tc := range tests {
+		got := isStableState(tc.state)
+		if got != tc.expected {
+			t.Errorf("isStableState(%q) = %v, want %v", tc.state, got, tc.expected)
+		}
+	}
+}
+
+func TestIsValidDesiredState(t *testing.T) {
+	tests := []struct {
+		state    string
+		expected bool
+	}{
+		{"running", true},
+		{"RUNNING", true},
+		{"stopped", true},
+		{"STOPPED", true},
+		{"deploying", false},
+		{"crashed", false},
+		{"paused", false},
+	}
+
+	for _, tc := range tests {
+		got := isValidDesiredState(tc.state)
+		if got != tc.expected {
+			t.Errorf("isValidDesiredState(%q) = %v, want %v", tc.state, got, tc.expected)
+		}
+	}
+}
