@@ -23,6 +23,8 @@ Manages a TrueNAS application (custom Docker Compose app or catalog app).
 ### Optional
 
 - `compose_config` (String) Docker Compose YAML configuration string (required for custom apps).
+- `desired_state` (String) Desired application state: 'running' or 'stopped' (case-insensitive). Defaults to 'RUNNING'.
+- `state_timeout` (Number) Timeout in seconds to wait for state transitions. Defaults to 120. Range: 30-600.
 
 ### Read-Only
 
