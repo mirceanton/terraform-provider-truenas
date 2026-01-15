@@ -1193,6 +1193,72 @@ func TestAppResource_Schema_DesiredStateAttribute(t *testing.T) {
 }
 
 // Test ImportState followed by Read verifies the flow works
+func TestAppResource_queryAppState_Success(t *testing.T) {
+	r := &AppResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method != "app.query" {
+					t.Errorf("expected method 'app.query', got %q", method)
+				}
+				return json.RawMessage(`[{"name": "myapp", "state": "RUNNING"}]`), nil
+			},
+		},
+	}
+
+	state, err := r.queryAppState(context.Background(), "myapp")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state != "RUNNING" {
+		t.Errorf("expected state RUNNING, got %q", state)
+	}
+}
+
+func TestAppResource_queryAppState_NotFound(t *testing.T) {
+	r := &AppResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[]`), nil
+			},
+		},
+	}
+
+	_, err := r.queryAppState(context.Background(), "myapp")
+	if err == nil {
+		t.Fatal("expected error for app not found")
+	}
+}
+
+func TestAppResource_queryAppState_APIError(t *testing.T) {
+	r := &AppResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return nil, errors.New("connection failed")
+			},
+		},
+	}
+
+	_, err := r.queryAppState(context.Background(), "myapp")
+	if err == nil {
+		t.Fatal("expected error for API error")
+	}
+}
+
+func TestAppResource_queryAppState_InvalidJSON(t *testing.T) {
+	r := &AppResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`not valid json`), nil
+			},
+		},
+	}
+
+	_, err := r.queryAppState(context.Background(), "myapp")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
 func TestAppResource_ImportState_FollowedByRead(t *testing.T) {
 	r := &AppResource{
 		client: &client.MockClient{

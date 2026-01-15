@@ -400,3 +400,23 @@ func (r *AppResource) buildUpdateParams(_ context.Context, data *AppResourceMode
 	return params
 }
 
+// queryAppState queries the TrueNAS API for the current state of an app.
+func (r *AppResource) queryAppState(ctx context.Context, name string) (string, error) {
+	filter := [][]any{{"name", "=", name}}
+	result, err := r.client.Call(ctx, "app.query", filter)
+	if err != nil {
+		return "", err
+	}
+
+	var apps []appAPIResponse
+	if err := json.Unmarshal(result, &apps); err != nil {
+		return "", err
+	}
+
+	if len(apps) == 0 {
+		return "", fmt.Errorf("app %q not found", name)
+	}
+
+	return apps[0].State, nil
+}
+
