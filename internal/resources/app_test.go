@@ -1691,3 +1691,109 @@ func TestAppResource_Create_WithDesiredStateStopped(t *testing.T) {
 		t.Errorf("expected final state STOPPED, got %q", model.State.ValueString())
 	}
 }
+
+func TestAppResource_Update_CrashedAppStartAttempt(t *testing.T) {
+	var calledMethod string
+	queryCount := 0
+	r := &AppResource{
+		client: &client.MockClient{
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				calledMethod = method
+				return nil, nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				queryCount++
+				// First query: return CRASHED (the current state)
+				// Subsequent queries: return RUNNING (after start attempt)
+				if queryCount == 1 {
+					return json.RawMessage(`[{"name": "myapp", "state": "CRASHED"}]`), nil
+				}
+				return json.RawMessage(`[{"name": "myapp", "state": "RUNNING"}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getAppResourceSchema(t)
+
+	// Current state: CRASHED, desired: RUNNING
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "CRASHED")
+	planValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), nil)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify app.start was called to recover from CRASHED
+	if calledMethod != "app.start" {
+		t.Errorf("expected app.start to be called for CRASHED app, got %q", calledMethod)
+	}
+}
+
+func TestAppResource_Update_CrashedAppDesiredStopped(t *testing.T) {
+	callCount := 0
+	r := &AppResource{
+		client: &client.MockClient{
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				callCount++
+				return nil, nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[{"name": "myapp", "state": "CRASHED"}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getAppResourceSchema(t)
+
+	// Current state: CRASHED, desired: STOPPED - no action needed
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED", float64(120), "CRASHED")
+	planValue := createAppResourceModelValue("myapp", "myapp", true, nil, "STOPPED", float64(120), nil)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	// Should not error - CRASHED is "stopped enough"
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// No start/stop should be called
+	if callCount > 0 {
+		t.Errorf("expected no API calls for CRASHED->STOPPED, got %d", callCount)
+	}
+}

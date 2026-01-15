@@ -545,6 +545,11 @@ func (r *AppResource) reconcileDesiredState(
 		return nil
 	}
 
+	// CRASHED is "stopped enough" when desired is STOPPED - no action needed
+	if normalizedDesired == AppStateStopped && currentState == AppStateCrashed {
+		return nil
+	}
+
 	// Add warning about drift
 	resp.Diagnostics.AddWarning(
 		"App state was externally changed",
