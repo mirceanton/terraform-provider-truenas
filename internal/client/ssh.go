@@ -410,11 +410,9 @@ func (c *SSHClient) GetVersion(ctx context.Context) (api.Version, error) {
 			return
 		}
 
-		var raw string
-		if err := json.Unmarshal(result, &raw); err != nil {
-			c.versionErr = fmt.Errorf("failed to parse version response: %w", err)
-			return
-		}
+		// system.version returns a raw string (not JSON), so convert directly
+		// and trim any whitespace/newlines
+		raw := strings.TrimSpace(string(result))
 
 		c.version, c.versionErr = api.ParseVersion(raw)
 	})
