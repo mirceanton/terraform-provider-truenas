@@ -106,7 +106,8 @@ func TestMockClient_WriteFile_NilFunc(t *testing.T) {
 	mock := &MockClient{}
 	ctx := context.Background()
 
-	err := mock.WriteFile(ctx, "/test", []byte("content"), 0644, -1, -1)
+	params := DefaultWriteFileParams([]byte("content"))
+	err := mock.WriteFile(ctx, "/test", params)
 	if err != nil {
 		t.Errorf("expected nil error for nil WriteFileFunc, got %v", err)
 	}
@@ -115,14 +116,15 @@ func TestMockClient_WriteFile_NilFunc(t *testing.T) {
 func TestMockClient_WriteFile_WithFunc(t *testing.T) {
 	called := false
 	mock := &MockClient{
-		WriteFileFunc: func(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error {
+		WriteFileFunc: func(ctx context.Context, path string, params WriteFileParams) error {
 			called = true
 			return nil
 		},
 	}
 	ctx := context.Background()
 
-	err := mock.WriteFile(ctx, "/test", []byte("content"), 0644, -1, -1)
+	params := DefaultWriteFileParams([]byte("content"))
+	err := mock.WriteFile(ctx, "/test", params)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}

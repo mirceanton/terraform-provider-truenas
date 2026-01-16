@@ -208,7 +208,13 @@ func TestSSHClient_WriteFile_Success(t *testing.T) {
 		},
 	}
 
-	err := client.WriteFile(context.Background(), "/mnt/storage/test.txt", []byte("hello world"), 0644, 1000, 1000)
+	params := WriteFileParams{
+		Content: []byte("hello world"),
+		Mode:    0644,
+		UID:     IntPtr(1000),
+		GID:     IntPtr(1000),
+	}
+	err := client.WriteFile(context.Background(), "/mnt/storage/test.txt", params)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -250,7 +256,8 @@ func TestSSHClient_WriteFile_Error(t *testing.T) {
 		},
 	}
 
-	err := client.WriteFile(context.Background(), "/mnt/storage/test.txt", []byte("hello"), 0644, -1, -1)
+	params := DefaultWriteFileParams([]byte("hello"))
+	err := client.WriteFile(context.Background(), "/mnt/storage/test.txt", params)
 	if err == nil {
 		t.Fatal("expected error for API failure")
 	}

@@ -8,6 +8,27 @@ import (
 	"github.com/deevus/terraform-provider-truenas/internal/api"
 )
 
+// WriteFileParams contains parameters for writing a file.
+type WriteFileParams struct {
+	Content []byte      // Required - file data to write
+	Mode    fs.FileMode // Default: 0644
+	UID     *int        // nil = unchanged, pointer allows explicit 0 (root)
+	GID     *int        // nil = unchanged, pointer allows explicit 0 (root)
+}
+
+// DefaultWriteFileParams returns params with sensible defaults.
+// Mode defaults to 0644. UID/GID are nil (unchanged).
+func DefaultWriteFileParams(content []byte) WriteFileParams {
+	return WriteFileParams{
+		Content: content,
+		Mode:    0644,
+		// UID and GID default to nil (zero value for *int)
+	}
+}
+
+// IntPtr returns a pointer to an int. Helper for setting UID/GID.
+func IntPtr(i int) *int { return &i }
+
 // Client defines the interface for communicating with TrueNAS.
 type Client interface {
 	// GetVersion returns the TrueNAS version. Probes once and caches.
@@ -20,8 +41,7 @@ type Client interface {
 	CallAndWait(ctx context.Context, method string, params any) (json.RawMessage, error)
 
 	// WriteFile writes content to a file on the remote system.
-	// uid and gid specify file ownership (-1 means unchanged).
-	WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error
+	WriteFile(ctx context.Context, path string, params WriteFileParams) error
 
 	// ReadFile reads the content of a file from the remote system.
 	ReadFile(ctx context.Context, path string) ([]byte, error)
@@ -56,7 +76,7 @@ type MockClient struct {
 	GetVersionFunc     func(ctx context.Context) (api.Version, error)
 	CallFunc           func(ctx context.Context, method string, params any) (json.RawMessage, error)
 	CallAndWaitFunc    func(ctx context.Context, method string, params any) (json.RawMessage, error)
-	WriteFileFunc      func(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error
+	WriteFileFunc      func(ctx context.Context, path string, params WriteFileParams) error
 	ReadFileFunc       func(ctx context.Context, path string) ([]byte, error)
 	DeleteFileFunc     func(ctx context.Context, path string) error
 	RemoveDirFunc      func(ctx context.Context, path string) error
@@ -89,9 +109,9 @@ func (m *MockClient) CallAndWait(ctx context.Context, method string, params any)
 	return nil, nil
 }
 
-func (m *MockClient) WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error {
+func (m *MockClient) WriteFile(ctx context.Context, path string, params WriteFileParams) error {
 	if m.WriteFileFunc != nil {
-		return m.WriteFileFunc(ctx, path, content, mode, uid, gid)
+		return m.WriteFileFunc(ctx, path, params)
 	}
 	return nil
 }

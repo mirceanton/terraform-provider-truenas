@@ -272,18 +272,18 @@ func (r *FileResource) Create(ctx context.Context, req resource.CreateRequest, r
 		}
 	}
 
-	// Determine uid/gid (-1 means use default/unchanged)
-	uid := -1
-	gid := -1
+	// Build write file params
+	params := client.DefaultWriteFileParams([]byte(content))
+	params.Mode = mode
 	if !data.UID.IsNull() && !data.UID.IsUnknown() {
-		uid = int(data.UID.ValueInt64())
+		params.UID = client.IntPtr(int(data.UID.ValueInt64()))
 	}
 	if !data.GID.IsNull() && !data.GID.IsUnknown() {
-		gid = int(data.GID.ValueInt64())
+		params.GID = client.IntPtr(int(data.GID.ValueInt64()))
 	}
 
 	// Write the file with ownership
-	if err := r.client.WriteFile(ctx, fullPath, []byte(content), mode, uid, gid); err != nil {
+	if err := r.client.WriteFile(ctx, fullPath, params); err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create File",
 			fmt.Sprintf("Unable to write file %q: %s", fullPath, err.Error()),
@@ -371,18 +371,18 @@ func (r *FileResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	content := data.Content.ValueString()
 	mode := parseMode(data.Mode.ValueString())
 
-	// Determine uid/gid (-1 means use default/unchanged)
-	uid := -1
-	gid := -1
+	// Build write file params
+	params := client.DefaultWriteFileParams([]byte(content))
+	params.Mode = mode
 	if !data.UID.IsNull() && !data.UID.IsUnknown() {
-		uid = int(data.UID.ValueInt64())
+		params.UID = client.IntPtr(int(data.UID.ValueInt64()))
 	}
 	if !data.GID.IsNull() && !data.GID.IsUnknown() {
-		gid = int(data.GID.ValueInt64())
+		params.GID = client.IntPtr(int(data.GID.ValueInt64()))
 	}
 
 	// Write the updated file with ownership
-	if err := r.client.WriteFile(ctx, fullPath, []byte(content), mode, uid, gid); err != nil {
+	if err := r.client.WriteFile(ctx, fullPath, params); err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Update File",
 			fmt.Sprintf("Unable to write file %q: %s", fullPath, err.Error()),

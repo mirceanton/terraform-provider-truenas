@@ -448,14 +448,24 @@ func (c *SSHClient) connectSFTP() error {
 // WriteFile writes content to a file on the remote system using the TrueNAS
 // filesystem.file_receive API. This runs with root privileges via middleware,
 // allowing writes to paths that would otherwise require elevated permissions.
-// uid and gid specify file ownership (-1 means unchanged).
-func (c *SSHClient) WriteFile(ctx context.Context, path string, content []byte, mode fs.FileMode, uid, gid int) error {
-	b64Content := base64.StdEncoding.EncodeToString(content)
+func (c *SSHClient) WriteFile(ctx context.Context, path string, fileParams WriteFileParams) error {
+	b64Content := base64.StdEncoding.EncodeToString(fileParams.Content)
+
+	// Convert nil UID/GID to -1 for the TrueNAS API (unchanged)
+	uid := -1
+	if fileParams.UID != nil {
+		uid = *fileParams.UID
+	}
+	gid := -1
+	if fileParams.GID != nil {
+		gid = *fileParams.GID
+	}
+
 	params := []any{
 		path,
 		b64Content,
 		map[string]any{
-			"mode": int(mode),
+			"mode": int(fileParams.Mode),
 			"uid":  uid,
 			"gid":  gid,
 		},
