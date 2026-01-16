@@ -2,7 +2,9 @@ package datasources
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -115,7 +117,89 @@ func (d *SnapshotsDataSource) Configure(ctx context.Context, req datasource.Conf
 	d.client = c
 }
 
+// snapshotsQueryResponse represents a snapshot from pool.snapshot.query.
+type snapshotsQueryResponse struct {
+	ID         string                     `json:"id"`
+	Name       string                     `json:"name"`
+	Dataset    string                     `json:"dataset"`
+	Holds      map[string]bool            `json:"holds"`
+	Properties snapshotPropertiesResponse `json:"properties"`
+}
+
+type snapshotPropertiesResponse struct {
+	Used       parsedValue `json:"used"`
+	Referenced parsedValue `json:"referenced"`
+}
+
 func (d *SnapshotsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
-	// TODO: implement
-	resp.Diagnostics.AddError("Not Implemented", "Read not yet implemented")
+	var data SnapshotsDataSourceModel
+
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Build filter for dataset
+	datasetID := data.DatasetID.ValueString()
+	filter := [][]any{{"dataset", "=", datasetID}}
+
+	// If recursive, match exact dataset OR child datasets (dataset/)
+	if !data.Recursive.IsNull() && data.Recursive.ValueBool() {
+		filter = [][]any{
+			{"OR", [][]any{
+				{"dataset", "=", datasetID},
+				{"dataset", "^", datasetID + "/"},
+			}},
+		}
+	}
+
+	result, err := d.client.Call(ctx, "pool.snapshot.query", filter)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Read Snapshots",
+			fmt.Sprintf("Unable to query snapshots: %s", err.Error()),
+		)
+		return
+	}
+
+	var snapshots []snapshotsQueryResponse
+	if err := json.Unmarshal(result, &snapshots); err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Parse Snapshots Response",
+			fmt.Sprintf("Unable to parse snapshots response: %s", err.Error()),
+		)
+		return
+	}
+
+	// Filter by name pattern if specified
+	namePattern := data.NamePattern.ValueString()
+
+	data.Snapshots = make([]SnapshotModel, 0, len(snapshots))
+	for _, snap := range snapshots {
+		// Apply name pattern filter
+		if namePattern != "" {
+			matched, err := filepath.Match(namePattern, snap.Name)
+			if err != nil {
+				resp.Diagnostics.AddError(
+					"Invalid Name Pattern",
+					fmt.Sprintf("Invalid glob pattern %q: %s", namePattern, err.Error()),
+				)
+				return
+			}
+			if !matched {
+				continue
+			}
+		}
+
+		data.Snapshots = append(data.Snapshots, SnapshotModel{
+			ID:              types.StringValue(snap.ID),
+			Name:            types.StringValue(snap.Name),
+			DatasetID:       types.StringValue(snap.Dataset),
+			UsedBytes:       types.Int64Value(snap.Properties.Used.Parsed),
+			ReferencedBytes: types.Int64Value(snap.Properties.Referenced.Parsed),
+			Hold:            types.BoolValue(len(snap.Holds) > 0),
+		})
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
