@@ -885,3 +885,48 @@ func TestSnapshotResource_Delete_APIError(t *testing.T) {
 		t.Fatal("expected error for API error")
 	}
 }
+
+func TestSnapshotResource_ImportState(t *testing.T) {
+	r := NewSnapshotResource().(*SnapshotResource)
+
+	schemaResp := getSnapshotResourceSchema(t)
+
+	// Create an initial empty state with the correct schema
+	emptyState := createSnapshotResourceModelValue(snapshotModelParams{
+		ID:              nil,
+		DatasetID:       nil,
+		Name:            nil,
+		Hold:            nil,
+		Recursive:       nil,
+		CreateTXG:       nil,
+		UsedBytes:       nil,
+		ReferencedBytes: nil,
+	})
+
+	req := resource.ImportStateRequest{
+		ID: "tank/data@snap1",
+	}
+
+	resp := &resource.ImportStateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    emptyState,
+		},
+	}
+
+	r.ImportState(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	var data SnapshotResourceModel
+	diags := resp.State.Get(context.Background(), &data)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+
+	if data.ID.ValueString() != "tank/data@snap1" {
+		t.Errorf("expected ID 'tank/data@snap1', got %q", data.ID.ValueString())
+	}
+}
