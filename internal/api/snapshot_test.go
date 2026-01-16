@@ -71,18 +71,23 @@ func TestSnapshotResponse_HasHold(t *testing.T) {
 		want     bool
 	}{
 		{
-			name:     "no holds",
-			snapshot: SnapshotResponse{Holds: nil},
+			name:     "no holds - empty string",
+			snapshot: SnapshotResponse{Properties: SnapshotProperties{UserRefs: UserRefsProperty{Parsed: ""}}},
 			want:     false,
 		},
 		{
-			name:     "empty holds map",
-			snapshot: SnapshotResponse{Holds: map[string]any{}},
+			name:     "no holds - zero",
+			snapshot: SnapshotResponse{Properties: SnapshotProperties{UserRefs: UserRefsProperty{Parsed: "0"}}},
 			want:     false,
 		},
 		{
-			name:     "has holds",
-			snapshot: SnapshotResponse{Holds: map[string]any{"terraform": true}},
+			name:     "has one hold",
+			snapshot: SnapshotResponse{Properties: SnapshotProperties{UserRefs: UserRefsProperty{Parsed: "1"}}},
+			want:     true,
+		},
+		{
+			name:     "has multiple holds",
+			snapshot: SnapshotResponse{Properties: SnapshotProperties{UserRefs: UserRefsProperty{Parsed: "3"}}},
 			want:     true,
 		},
 	}

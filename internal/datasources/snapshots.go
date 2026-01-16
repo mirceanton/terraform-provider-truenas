@@ -191,7 +191,7 @@ func (d *SnapshotsDataSource) Read(ctx context.Context, req datasource.ReadReque
 
 		data.Snapshots = append(data.Snapshots, SnapshotModel{
 			ID:              types.StringValue(snap.ID),
-			Name:            types.StringValue(snap.Name),
+			Name:            types.StringValue(snap.SnapshotName), // Use SnapshotName, not Name (which is full ID)
 			DatasetID:       types.StringValue(snap.Dataset),
 			UsedBytes:       types.Int64Value(snap.Properties.Used.Parsed),
 			ReferencedBytes: types.Int64Value(snap.Properties.Referenced.Parsed),

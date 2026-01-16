@@ -162,7 +162,7 @@ func (r *SnapshotResource) querySnapshot(ctx context.Context, snapshotID string)
 func mapSnapshotToModel(snap *api.SnapshotResponse, data *SnapshotResourceModel) {
 	data.ID = types.StringValue(snap.ID)
 	data.DatasetID = types.StringValue(snap.Dataset)
-	data.Name = types.StringValue(snap.Name)
+	data.Name = types.StringValue(snap.SnapshotName) // Use SnapshotName, not Name (which is full ID)
 	data.Hold = types.BoolValue(snap.HasHold())
 	data.CreateTXG = types.StringValue(snap.Properties.CreateTXG.Value)
 	data.UsedBytes = types.Int64Value(snap.Properties.Used.Parsed)
