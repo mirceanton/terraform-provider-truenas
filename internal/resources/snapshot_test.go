@@ -488,3 +488,164 @@ func TestSnapshotResource_Read_NotFound(t *testing.T) {
 		t.Error("expected state to be null when snapshot not found")
 	}
 }
+
+func TestSnapshotResource_Update_HoldToRelease(t *testing.T) {
+	var releaseCalled bool
+
+	r := &SnapshotResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.snapshot.release" {
+					releaseCalled = true
+					return json.RawMessage(`true`), nil
+				}
+				if method == "pool.snapshot.query" {
+					return json.RawMessage(`[{
+						"id": "tank/data@snap1",
+						"name": "snap1",
+						"dataset": "tank/data",
+						"properties": {
+							"createtxg": {"value": "12345"},
+							"used": {"parsed": 1024},
+							"referenced": {"parsed": 2048}
+						}
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getSnapshotResourceSchema(t)
+
+	// State has hold=true
+	stateValue := createSnapshotResourceModelValue(snapshotModelParams{
+		ID:              "tank/data@snap1",
+		DatasetID:       "tank/data",
+		Name:            "snap1",
+		Hold:            true,
+		Recursive:       false,
+		CreateTXG:       "12345",
+		UsedBytes:       float64(1024),
+		ReferencedBytes: float64(2048),
+	})
+
+	// Plan has hold=false
+	planValue := createSnapshotResourceModelValue(snapshotModelParams{
+		ID:              "tank/data@snap1",
+		DatasetID:       "tank/data",
+		Name:            "snap1",
+		Hold:            false,
+		Recursive:       false,
+		CreateTXG:       "12345",
+		UsedBytes:       float64(1024),
+		ReferencedBytes: float64(2048),
+	})
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if !releaseCalled {
+		t.Error("expected pool.snapshot.release to be called")
+	}
+}
+
+func TestSnapshotResource_Update_ReleaseToHold(t *testing.T) {
+	var holdCalled bool
+
+	r := &SnapshotResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.snapshot.hold" {
+					holdCalled = true
+					return json.RawMessage(`true`), nil
+				}
+				if method == "pool.snapshot.query" {
+					return json.RawMessage(`[{
+						"id": "tank/data@snap1",
+						"name": "snap1",
+						"dataset": "tank/data",
+						"holds": {},
+						"properties": {
+							"createtxg": {"value": "12345"},
+							"used": {"parsed": 1024},
+							"referenced": {"parsed": 2048}
+						}
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getSnapshotResourceSchema(t)
+
+	stateValue := createSnapshotResourceModelValue(snapshotModelParams{
+		ID:              "tank/data@snap1",
+		DatasetID:       "tank/data",
+		Name:            "snap1",
+		Hold:            false,
+		Recursive:       false,
+		CreateTXG:       "12345",
+		UsedBytes:       float64(1024),
+		ReferencedBytes: float64(2048),
+	})
+
+	planValue := createSnapshotResourceModelValue(snapshotModelParams{
+		ID:              "tank/data@snap1",
+		DatasetID:       "tank/data",
+		Name:            "snap1",
+		Hold:            true,
+		Recursive:       false,
+		CreateTXG:       "12345",
+		UsedBytes:       float64(1024),
+		ReferencedBytes: float64(2048),
+	})
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if !holdCalled {
+		t.Error("expected pool.snapshot.hold to be called")
+	}
+}

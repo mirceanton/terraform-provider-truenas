@@ -279,8 +279,65 @@ func (r *SnapshotResource) Read(ctx context.Context, req resource.ReadRequest, r
 }
 
 func (r *SnapshotResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	// TODO: implement
-	resp.Diagnostics.AddError("Not Implemented", "Update not yet implemented")
+	var state SnapshotResourceModel
+	var plan SnapshotResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	snapshotID := state.ID.ValueString()
+
+	// Handle hold changes
+	stateHold := state.Hold.ValueBool()
+	planHold := plan.Hold.ValueBool()
+
+	if stateHold && !planHold {
+		// Release hold
+		_, err := r.client.Call(ctx, "pool.snapshot.release", snapshotID)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Release Snapshot Hold",
+				fmt.Sprintf("Unable to release hold on snapshot %q: %s", snapshotID, err.Error()),
+			)
+			return
+		}
+	} else if !stateHold && planHold {
+		// Apply hold
+		_, err := r.client.Call(ctx, "pool.snapshot.hold", snapshotID)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Hold Snapshot",
+				fmt.Sprintf("Unable to hold snapshot %q: %s", snapshotID, err.Error()),
+			)
+			return
+		}
+	}
+
+	// Refresh state from API
+	snap, err := r.querySnapshot(ctx, snapshotID)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Read Snapshot",
+			fmt.Sprintf("Unable to read snapshot %q: %s", snapshotID, err.Error()),
+		)
+		return
+	}
+
+	if snap == nil {
+		resp.Diagnostics.AddError(
+			"Snapshot Not Found",
+			fmt.Sprintf("Snapshot %q no longer exists.", snapshotID),
+		)
+		return
+	}
+
+	mapSnapshotToModel(snap, &plan)
+	plan.Hold = types.BoolValue(planHold) // Preserve the planned hold value
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *SnapshotResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
