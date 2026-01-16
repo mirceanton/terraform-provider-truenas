@@ -381,3 +381,110 @@ func TestSnapshotResource_Create_APIError(t *testing.T) {
 		t.Fatal("expected error for API error")
 	}
 }
+
+func TestSnapshotResource_Read_Success(t *testing.T) {
+	r := &SnapshotResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[{
+					"id": "tank/data@snap1",
+					"name": "snap1",
+					"dataset": "tank/data",
+					"properties": {
+						"createtxg": {"value": "12345"},
+						"used": {"parsed": 1024},
+						"referenced": {"parsed": 2048}
+					}
+				}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getSnapshotResourceSchema(t)
+	stateValue := createSnapshotResourceModelValue(snapshotModelParams{
+		ID:              "tank/data@snap1",
+		DatasetID:       "tank/data",
+		Name:            "snap1",
+		Hold:            false,
+		Recursive:       false,
+		CreateTXG:       "",
+		UsedBytes:       float64(0),
+		ReferencedBytes: float64(0),
+	})
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Read(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	var data SnapshotResourceModel
+	resp.State.Get(context.Background(), &data)
+
+	if data.CreateTXG.ValueString() != "12345" {
+		t.Errorf("expected createtxg '12345', got %q", data.CreateTXG.ValueString())
+	}
+	if data.UsedBytes.ValueInt64() != 1024 {
+		t.Errorf("expected used_bytes 1024, got %d", data.UsedBytes.ValueInt64())
+	}
+}
+
+func TestSnapshotResource_Read_NotFound(t *testing.T) {
+	r := &SnapshotResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[]`), nil
+			},
+		},
+	}
+
+	schemaResp := getSnapshotResourceSchema(t)
+	stateValue := createSnapshotResourceModelValue(snapshotModelParams{
+		ID:              "tank/data@snap1",
+		DatasetID:       "tank/data",
+		Name:            "snap1",
+		Hold:            false,
+		Recursive:       false,
+		CreateTXG:       "",
+		UsedBytes:       float64(0),
+		ReferencedBytes: float64(0),
+	})
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Read(context.Background(), req, resp)
+
+	// Should not error - just remove from state
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// State should be empty (null)
+	if !resp.State.Raw.IsNull() {
+		t.Error("expected state to be null when snapshot not found")
+	}
+}

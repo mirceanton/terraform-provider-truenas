@@ -251,8 +251,31 @@ func (r *SnapshotResource) Create(ctx context.Context, req resource.CreateReques
 }
 
 func (r *SnapshotResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// TODO: implement
-	resp.Diagnostics.AddError("Not Implemented", "Read not yet implemented")
+	var data SnapshotResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	snap, err := r.querySnapshot(ctx, data.ID.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Read Snapshot",
+			fmt.Sprintf("Unable to read snapshot %q: %s", data.ID.ValueString(), err.Error()),
+		)
+		return
+	}
+
+	if snap == nil {
+		// Snapshot no longer exists - remove from state
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	mapSnapshotToModel(snap, &data)
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *SnapshotResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
