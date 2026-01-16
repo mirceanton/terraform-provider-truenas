@@ -168,5 +168,6 @@ func (p *TrueNASProvider) Resources(ctx context.Context) []func() resource.Resou
 		resources.NewHostPathResource,
 		resources.NewAppResource,
 		resources.NewFileResource,
+		resources.NewSnapshotResource,
 	}
 }
