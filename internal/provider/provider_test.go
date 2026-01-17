@@ -194,9 +194,9 @@ func TestProvider_Resources(t *testing.T) {
 		t.Error("expected non-nil resources slice")
 	}
 
-	// Verify the expected number of resources (dataset, host_path, app, file, snapshot, cloudsync_credentials)
-	if len(resources) != 6 {
-		t.Errorf("expected 6 resources, got %d", len(resources))
+	// Verify the expected number of resources (dataset, host_path, app, file, snapshot, cloudsync_credentials, cloudsync_task)
+	if len(resources) != 7 {
+		t.Errorf("expected 7 resources, got %d", len(resources))
 	}
 
 	// Verify the return type
