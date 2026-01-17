@@ -219,7 +219,7 @@ func (r *CloudSyncTaskResource) Schema(ctx context.Context, req resource.SchemaR
 				Attributes: map[string]schema.Attribute{
 					"password": schema.StringAttribute{
 						Description: "Encryption password.",
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 					},
 					"salt": schema.StringAttribute{
@@ -500,6 +500,11 @@ func validateTaskProviderBlock(data *CloudSyncTaskResourceModel) []string {
 	if data.Azure != nil {
 		if data.Azure.Container.IsNull() || data.Azure.Container.ValueString() == "" {
 			errors = append(errors, "azure.container is required when azure block is specified")
+		}
+	}
+	if data.Encryption != nil {
+		if data.Encryption.Password.IsNull() || data.Encryption.Password.ValueString() == "" {
+			errors = append(errors, "encryption.password is required when encryption block is specified")
 		}
 	}
 
