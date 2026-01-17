@@ -1061,3 +1061,38 @@ func TestCloudSyncCredentialsResource_Create_Azure_Success(t *testing.T) {
 		t.Errorf("expected ID '8', got %q", resultData.ID.ValueString())
 	}
 }
+
+func TestCloudSyncCredentialsResource_ImportState_Success(t *testing.T) {
+	r := NewCloudSyncCredentialsResource().(*CloudSyncCredentialsResource)
+
+	schemaResp := getCloudSyncCredentialsResourceSchema(t)
+
+	emptyState := createCloudSyncCredentialsModelValue(cloudSyncCredentialsModelParams{})
+
+	req := resource.ImportStateRequest{
+		ID: "5",
+	}
+
+	resp := &resource.ImportStateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    emptyState,
+		},
+	}
+
+	r.ImportState(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	var data CloudSyncCredentialsResourceModel
+	diags := resp.State.Get(context.Background(), &data)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+
+	if data.ID.ValueString() != "5" {
+		t.Errorf("expected ID '5', got %q", data.ID.ValueString())
+	}
+}
