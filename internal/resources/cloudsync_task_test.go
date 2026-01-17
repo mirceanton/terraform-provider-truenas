@@ -1561,3 +1561,407 @@ func TestCloudSyncTaskResource_Create_MultipleProviderBlocks(t *testing.T) {
 		t.Fatal("expected error when multiple provider blocks specified")
 	}
 }
+
+func TestCloudSyncTaskResource_Create_ScheduleDefaults(t *testing.T) {
+	var capturedParams any
+
+	r := &CloudSyncTaskResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "cloudsync.create" {
+					capturedParams = params
+					return json.RawMessage(`{"id": 20}`), nil
+				}
+				if method == "cloudsync.query" {
+					return json.RawMessage(`[{
+						"id": 20,
+						"description": "Schedule Defaults Test",
+						"path": "/mnt/tank/data",
+						"credentials": 5,
+						"attributes": {"bucket": "test-bucket", "folder": "/"},
+						"schedule": {"minute": "0", "hour": "3", "dom": "*", "month": "*", "dow": "*"},
+						"direction": "PUSH",
+						"transfer_mode": "SYNC",
+						"encryption": false,
+						"snapshot": false,
+						"transfers": 4,
+						"follow_symlinks": false,
+						"create_empty_src_dirs": false,
+						"enabled": true
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getCloudSyncTaskResourceSchema(t)
+	// Only provide required schedule fields (minute, hour)
+	// dom, month, dow should default to "*"
+	planValue := createCloudSyncTaskModelValue(cloudSyncTaskModelParams{
+		Description:  "Schedule Defaults Test",
+		Path:         "/mnt/tank/data",
+		Credentials:  5,
+		Direction:    "push",
+		TransferMode: "sync",
+		Transfers:    4,
+		Enabled:      true,
+		Schedule: &scheduleBlockParams{
+			Minute: "0",
+			Hour:   "3",
+			Dom:    "*",
+			Month:  "*",
+			Dow:    "*",
+		},
+		S3: &taskS3BlockParams{
+			Bucket: "test-bucket",
+			Folder: "/",
+		},
+	})
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify schedule params
+	params, ok := capturedParams.(map[string]any)
+	if !ok {
+		t.Fatalf("expected params to be map[string]any, got %T", capturedParams)
+	}
+
+	schedule, ok := params["schedule"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schedule to be map[string]any, got %T", params["schedule"])
+	}
+
+	// Verify required fields are passed correctly
+	if schedule["minute"] != "0" {
+		t.Errorf("expected schedule minute '0', got %v", schedule["minute"])
+	}
+	if schedule["hour"] != "3" {
+		t.Errorf("expected schedule hour '3', got %v", schedule["hour"])
+	}
+
+	// Verify default fields have wildcard values
+	if schedule["dom"] != "*" {
+		t.Errorf("expected schedule dom '*' (default), got %v", schedule["dom"])
+	}
+	if schedule["month"] != "*" {
+		t.Errorf("expected schedule month '*' (default), got %v", schedule["month"])
+	}
+	if schedule["dow"] != "*" {
+		t.Errorf("expected schedule dow '*' (default), got %v", schedule["dow"])
+	}
+
+	// Verify state was set correctly
+	var resultData CloudSyncTaskResourceModel
+	resp.State.Get(context.Background(), &resultData)
+	if resultData.ID.ValueString() != "20" {
+		t.Errorf("expected ID '20', got %q", resultData.ID.ValueString())
+	}
+	if resultData.Schedule == nil {
+		t.Fatal("expected schedule block to be set")
+	}
+	if resultData.Schedule.Dom.ValueString() != "*" {
+		t.Errorf("expected state schedule dom '*', got %q", resultData.Schedule.Dom.ValueString())
+	}
+}
+
+func TestCloudSyncTaskResource_Create_CustomSchedule(t *testing.T) {
+	var capturedParams any
+
+	r := &CloudSyncTaskResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "cloudsync.create" {
+					capturedParams = params
+					return json.RawMessage(`{"id": 21}`), nil
+				}
+				if method == "cloudsync.query" {
+					return json.RawMessage(`[{
+						"id": 21,
+						"description": "Custom Schedule Test",
+						"path": "/mnt/tank/data",
+						"credentials": 5,
+						"attributes": {"bucket": "test-bucket", "folder": "/"},
+						"schedule": {"minute": "*/5", "hour": "9-17", "dom": "1,15", "month": "1-6", "dow": "1-5"},
+						"direction": "PUSH",
+						"transfer_mode": "SYNC",
+						"encryption": false,
+						"snapshot": false,
+						"transfers": 4,
+						"follow_symlinks": false,
+						"create_empty_src_dirs": false,
+						"enabled": true
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getCloudSyncTaskResourceSchema(t)
+	// Custom schedule: every 5 minutes during business hours (9-17), weekdays only (1-5),
+	// on 1st and 15th of months Jan-June
+	planValue := createCloudSyncTaskModelValue(cloudSyncTaskModelParams{
+		Description:  "Custom Schedule Test",
+		Path:         "/mnt/tank/data",
+		Credentials:  5,
+		Direction:    "push",
+		TransferMode: "sync",
+		Transfers:    4,
+		Enabled:      true,
+		Schedule: &scheduleBlockParams{
+			Minute: "*/5",    // Every 5 minutes
+			Hour:   "9-17",   // Business hours (9am-5pm)
+			Dom:    "1,15",   // 1st and 15th of month
+			Month:  "1-6",    // January through June
+			Dow:    "1-5",    // Monday through Friday
+		},
+		S3: &taskS3BlockParams{
+			Bucket: "test-bucket",
+			Folder: "/",
+		},
+	})
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify schedule params
+	params, ok := capturedParams.(map[string]any)
+	if !ok {
+		t.Fatalf("expected params to be map[string]any, got %T", capturedParams)
+	}
+
+	schedule, ok := params["schedule"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schedule to be map[string]any, got %T", params["schedule"])
+	}
+
+	// Verify all custom cron expressions are passed correctly
+	if schedule["minute"] != "*/5" {
+		t.Errorf("expected schedule minute '*/5', got %v", schedule["minute"])
+	}
+	if schedule["hour"] != "9-17" {
+		t.Errorf("expected schedule hour '9-17', got %v", schedule["hour"])
+	}
+	if schedule["dom"] != "1,15" {
+		t.Errorf("expected schedule dom '1,15', got %v", schedule["dom"])
+	}
+	if schedule["month"] != "1-6" {
+		t.Errorf("expected schedule month '1-6', got %v", schedule["month"])
+	}
+	if schedule["dow"] != "1-5" {
+		t.Errorf("expected schedule dow '1-5', got %v", schedule["dow"])
+	}
+
+	// Verify state was set correctly
+	var resultData CloudSyncTaskResourceModel
+	resp.State.Get(context.Background(), &resultData)
+	if resultData.ID.ValueString() != "21" {
+		t.Errorf("expected ID '21', got %q", resultData.ID.ValueString())
+	}
+	if resultData.Schedule == nil {
+		t.Fatal("expected schedule block to be set")
+	}
+	if resultData.Schedule.Minute.ValueString() != "*/5" {
+		t.Errorf("expected state schedule minute '*/5', got %q", resultData.Schedule.Minute.ValueString())
+	}
+	if resultData.Schedule.Hour.ValueString() != "9-17" {
+		t.Errorf("expected state schedule hour '9-17', got %q", resultData.Schedule.Hour.ValueString())
+	}
+	if resultData.Schedule.Dom.ValueString() != "1,15" {
+		t.Errorf("expected state schedule dom '1,15', got %q", resultData.Schedule.Dom.ValueString())
+	}
+	if resultData.Schedule.Month.ValueString() != "1-6" {
+		t.Errorf("expected state schedule month '1-6', got %q", resultData.Schedule.Month.ValueString())
+	}
+	if resultData.Schedule.Dow.ValueString() != "1-5" {
+		t.Errorf("expected state schedule dow '1-5', got %q", resultData.Schedule.Dow.ValueString())
+	}
+}
+
+func TestCloudSyncTaskResource_Update_ScheduleOnly(t *testing.T) {
+	var capturedMethod string
+	var capturedID int64
+	var capturedUpdateData map[string]any
+
+	r := &CloudSyncTaskResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "cloudsync.update" {
+					capturedMethod = method
+					args := params.([]any)
+					capturedID = args[0].(int64)
+					capturedUpdateData = args[1].(map[string]any)
+					return json.RawMessage(`{"id": 22}`), nil
+				}
+				if method == "cloudsync.query" {
+					return json.RawMessage(`[{
+						"id": 22,
+						"description": "Schedule Update Test",
+						"path": "/mnt/tank/data",
+						"credentials": 5,
+						"attributes": {"bucket": "test-bucket", "folder": "/backups/"},
+						"schedule": {"minute": "*/15", "hour": "0", "dom": "*", "month": "*", "dow": "0,6"},
+						"direction": "PUSH",
+						"transfer_mode": "SYNC",
+						"encryption": false,
+						"snapshot": false,
+						"transfers": 4,
+						"follow_symlinks": false,
+						"create_empty_src_dirs": false,
+						"enabled": true
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getCloudSyncTaskResourceSchema(t)
+
+	// Current state: daily at 3am
+	stateValue := createCloudSyncTaskModelValue(cloudSyncTaskModelParams{
+		ID:           "22",
+		Description:  "Schedule Update Test",
+		Path:         "/mnt/tank/data",
+		Credentials:  5,
+		Direction:    "push",
+		TransferMode: "sync",
+		Transfers:    4,
+		Enabled:      true,
+		Schedule: &scheduleBlockParams{
+			Minute: "0",
+			Hour:   "3",
+			Dom:    "*",
+			Month:  "*",
+			Dow:    "*",
+		},
+		S3: &taskS3BlockParams{
+			Bucket: "test-bucket",
+			Folder: "/backups/",
+		},
+	})
+
+	// Updated plan: every 15 minutes at midnight on weekends only
+	planValue := createCloudSyncTaskModelValue(cloudSyncTaskModelParams{
+		ID:           "22",
+		Description:  "Schedule Update Test",
+		Path:         "/mnt/tank/data",
+		Credentials:  5,
+		Direction:    "push",
+		TransferMode: "sync",
+		Transfers:    4,
+		Enabled:      true,
+		Schedule: &scheduleBlockParams{
+			Minute: "*/15",   // Every 15 minutes
+			Hour:   "0",      // Midnight
+			Dom:    "*",
+			Month:  "*",
+			Dow:    "0,6",    // Saturday and Sunday
+		},
+		S3: &taskS3BlockParams{
+			Bucket: "test-bucket",
+			Folder: "/backups/",
+		},
+	})
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if capturedMethod != "cloudsync.update" {
+		t.Errorf("expected method 'cloudsync.update', got %q", capturedMethod)
+	}
+
+	if capturedID != 22 {
+		t.Errorf("expected ID 22, got %d", capturedID)
+	}
+
+	// Verify that description remains unchanged
+	if capturedUpdateData["description"] != "Schedule Update Test" {
+		t.Errorf("expected description 'Schedule Update Test', got %v", capturedUpdateData["description"])
+	}
+
+	// Verify schedule was updated
+	schedule, ok := capturedUpdateData["schedule"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schedule to be map[string]any, got %T", capturedUpdateData["schedule"])
+	}
+	if schedule["minute"] != "*/15" {
+		t.Errorf("expected schedule minute '*/15', got %v", schedule["minute"])
+	}
+	if schedule["hour"] != "0" {
+		t.Errorf("expected schedule hour '0', got %v", schedule["hour"])
+	}
+	if schedule["dow"] != "0,6" {
+		t.Errorf("expected schedule dow '0,6', got %v", schedule["dow"])
+	}
+
+	// Verify state was updated correctly
+	var resultData CloudSyncTaskResourceModel
+	resp.State.Get(context.Background(), &resultData)
+	if resultData.Schedule == nil {
+		t.Fatal("expected schedule block to be set")
+	}
+	if resultData.Schedule.Minute.ValueString() != "*/15" {
+		t.Errorf("expected state schedule minute '*/15', got %q", resultData.Schedule.Minute.ValueString())
+	}
+	if resultData.Schedule.Hour.ValueString() != "0" {
+		t.Errorf("expected state schedule hour '0', got %q", resultData.Schedule.Hour.ValueString())
+	}
+	if resultData.Schedule.Dow.ValueString() != "0,6" {
+		t.Errorf("expected state schedule dow '0,6', got %q", resultData.Schedule.Dow.ValueString())
+	}
+}
