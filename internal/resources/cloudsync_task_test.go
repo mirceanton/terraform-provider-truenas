@@ -90,3 +90,64 @@ func TestCloudSyncTaskResource_Configure_WrongType(t *testing.T) {
 		t.Fatal("expected error for wrong ProviderData type")
 	}
 }
+
+func TestCloudSyncTaskResource_Schema(t *testing.T) {
+	r := NewCloudSyncTaskResource()
+
+	ctx := context.Background()
+	schemaReq := resource.SchemaRequest{}
+	schemaResp := &resource.SchemaResponse{}
+
+	r.Schema(ctx, schemaReq, schemaResp)
+
+	if schemaResp.Schema.Description == "" {
+		t.Error("expected non-empty schema description")
+	}
+
+	// Verify required attributes exist
+	attrs := schemaResp.Schema.Attributes
+	if attrs["id"] == nil {
+		t.Error("expected 'id' attribute")
+	}
+	if attrs["description"] == nil {
+		t.Error("expected 'description' attribute")
+	}
+	if attrs["path"] == nil {
+		t.Error("expected 'path' attribute")
+	}
+	if attrs["credentials"] == nil {
+		t.Error("expected 'credentials' attribute")
+	}
+	if attrs["direction"] == nil {
+		t.Error("expected 'direction' attribute")
+	}
+	if attrs["transfer_mode"] == nil {
+		t.Error("expected 'transfer_mode' attribute")
+	}
+
+	// Verify sync_on_change attribute
+	if attrs["sync_on_change"] == nil {
+		t.Error("expected 'sync_on_change' attribute")
+	}
+
+	// Verify blocks exist
+	blocks := schemaResp.Schema.Blocks
+	if blocks["schedule"] == nil {
+		t.Error("expected 'schedule' block")
+	}
+	if blocks["encryption"] == nil {
+		t.Error("expected 'encryption' block")
+	}
+	if blocks["s3"] == nil {
+		t.Error("expected 's3' block")
+	}
+	if blocks["b2"] == nil {
+		t.Error("expected 'b2' block")
+	}
+	if blocks["gcs"] == nil {
+		t.Error("expected 'gcs' block")
+	}
+	if blocks["azure"] == nil {
+		t.Error("expected 'azure' block")
+	}
+}
