@@ -628,7 +628,30 @@ func (r *CloudSyncTaskResource) Update(ctx context.Context, req resource.UpdateR
 }
 
 func (r *CloudSyncTaskResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	// TODO: Implement
+	var data CloudSyncTaskResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Invalid ID",
+			fmt.Sprintf("Unable to parse ID %q: %s", data.ID.ValueString(), err.Error()),
+		)
+		return
+	}
+
+	_, err = r.client.Call(ctx, "cloudsync.delete", id)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Delete Task",
+			fmt.Sprintf("Unable to delete task: %s", err.Error()),
+		)
+		return
+	}
 }
 
 func (r *CloudSyncTaskResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

@@ -858,3 +858,54 @@ func TestCloudSyncTaskResource_Update_SyncOnChange(t *testing.T) {
 		t.Errorf("expected sync to be called with ID 10, got %d", syncID)
 	}
 }
+
+func TestCloudSyncTaskResource_Delete_Success(t *testing.T) {
+	var capturedMethod string
+	var capturedID int64
+
+	r := &CloudSyncTaskResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				capturedMethod = method
+				capturedID = params.(int64)
+				return json.RawMessage(`true`), nil
+			},
+		},
+	}
+
+	schemaResp := getCloudSyncTaskResourceSchema(t)
+	stateValue := createCloudSyncTaskModelValue(cloudSyncTaskModelParams{
+		ID:          "10",
+		Description: "Daily Backup",
+		Path:        "/mnt/tank/data",
+		Credentials: 5,
+		Direction:   "push",
+		S3: &taskS3BlockParams{
+			Bucket: "my-bucket",
+			Folder: "/backups/",
+		},
+	})
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if capturedMethod != "cloudsync.delete" {
+		t.Errorf("expected method 'cloudsync.delete', got %q", capturedMethod)
+	}
+
+	if capturedID != 10 {
+		t.Errorf("expected ID 10, got %d", capturedID)
+	}
+}
