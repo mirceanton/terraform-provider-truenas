@@ -160,6 +160,7 @@ func (p *TrueNASProvider) DataSources(ctx context.Context) []func() datasource.D
 		datasources.NewPoolDataSource,
 		datasources.NewDatasetDataSource,
 		datasources.NewSnapshotsDataSource,
+		datasources.NewCloudSyncCredentialsDataSource,
 	}
 }
 

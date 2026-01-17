@@ -167,9 +167,9 @@ func TestProvider_DataSources(t *testing.T) {
 		t.Error("expected non-nil data sources slice")
 	}
 
-	// Verify we have the expected data sources (pool, dataset, snapshots)
-	if len(dataSources) != 3 {
-		t.Errorf("expected 3 data sources, got %d", len(dataSources))
+	// Verify we have the expected data sources (pool, dataset, snapshots, cloudsync_credentials)
+	if len(dataSources) != 4 {
+		t.Errorf("expected 4 data sources, got %d", len(dataSources))
 	}
 
 	// Verify the return type
