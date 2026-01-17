@@ -2,11 +2,13 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"math/big"
 	"testing"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
@@ -376,4 +378,135 @@ func createCloudSyncTaskModelValue(p cloudSyncTaskModelParams) tftypes.Value {
 	}
 
 	return tftypes.NewValue(objectType, values)
+}
+
+func TestCloudSyncTaskResource_Create_S3_Success(t *testing.T) {
+	var capturedMethod string
+	var capturedParams any
+
+	r := &CloudSyncTaskResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "cloudsync.create" {
+					capturedMethod = method
+					capturedParams = params
+					return json.RawMessage(`{"id": 10}`), nil
+				}
+				if method == "cloudsync.query" {
+					return json.RawMessage(`[{
+						"id": 10,
+						"description": "Daily Backup",
+						"path": "/mnt/tank/data",
+						"credentials": 5,
+						"attributes": {"bucket": "my-bucket", "folder": "/backups/"},
+						"schedule": {"minute": "0", "hour": "3", "dom": "*", "month": "*", "dow": "*"},
+						"direction": "PUSH",
+						"transfer_mode": "SYNC",
+						"encryption": false,
+						"snapshot": false,
+						"transfers": 4,
+						"follow_symlinks": false,
+						"create_empty_src_dirs": false,
+						"enabled": true
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getCloudSyncTaskResourceSchema(t)
+	planValue := createCloudSyncTaskModelValue(cloudSyncTaskModelParams{
+		Description:  "Daily Backup",
+		Path:         "/mnt/tank/data",
+		Credentials:  5,
+		Direction:    "push",
+		TransferMode: "sync",
+		Transfers:    4,
+		Enabled:      true,
+		Schedule: &scheduleBlockParams{
+			Minute: "0",
+			Hour:   "3",
+			Dom:    "*",
+			Month:  "*",
+			Dow:    "*",
+		},
+		S3: &taskS3BlockParams{
+			Bucket: "my-bucket",
+			Folder: "/backups/",
+		},
+	})
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if capturedMethod != "cloudsync.create" {
+		t.Errorf("expected method 'cloudsync.create', got %q", capturedMethod)
+	}
+
+	// Verify params
+	params, ok := capturedParams.(map[string]any)
+	if !ok {
+		t.Fatalf("expected params to be map[string]any, got %T", capturedParams)
+	}
+
+	if params["description"] != "Daily Backup" {
+		t.Errorf("expected description 'Daily Backup', got %v", params["description"])
+	}
+	if params["path"] != "/mnt/tank/data" {
+		t.Errorf("expected path '/mnt/tank/data', got %v", params["path"])
+	}
+	if params["direction"] != "PUSH" {
+		t.Errorf("expected direction 'PUSH', got %v", params["direction"])
+	}
+	if params["transfer_mode"] != "SYNC" {
+		t.Errorf("expected transfer_mode 'SYNC', got %v", params["transfer_mode"])
+	}
+
+	// Verify schedule
+	schedule, ok := params["schedule"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schedule to be map[string]any, got %T", params["schedule"])
+	}
+	if schedule["minute"] != "0" {
+		t.Errorf("expected schedule minute '0', got %v", schedule["minute"])
+	}
+	if schedule["hour"] != "3" {
+		t.Errorf("expected schedule hour '3', got %v", schedule["hour"])
+	}
+
+	// Verify attributes (bucket/folder)
+	attributes, ok := params["attributes"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected attributes to be map[string]any, got %T", params["attributes"])
+	}
+	if attributes["bucket"] != "my-bucket" {
+		t.Errorf("expected attributes bucket 'my-bucket', got %v", attributes["bucket"])
+	}
+	if attributes["folder"] != "/backups/" {
+		t.Errorf("expected attributes folder '/backups/', got %v", attributes["folder"])
+	}
+
+	// Verify state was set
+	var resultData CloudSyncTaskResourceModel
+	resp.State.Get(context.Background(), &resultData)
+	if resultData.ID.ValueString() != "10" {
+		t.Errorf("expected ID '10', got %q", resultData.ID.ValueString())
+	}
 }

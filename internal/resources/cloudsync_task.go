@@ -2,8 +2,12 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 
+	"github.com/deevus/terraform-provider-truenas/internal/api"
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -300,7 +304,215 @@ func (r *CloudSyncTaskResource) Configure(ctx context.Context, req resource.Conf
 }
 
 func (r *CloudSyncTaskResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	// TODO: Implement
+	var data CloudSyncTaskResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Build params
+	params := map[string]any{
+		"description":   data.Description.ValueString(),
+		"path":          data.Path.ValueString(),
+		"credentials":   data.Credentials.ValueInt64(),
+		"direction":     strings.ToUpper(data.Direction.ValueString()),
+		"transfer_mode": strings.ToUpper(data.TransferMode.ValueString()),
+		"snapshot":      data.Snapshot.ValueBool(),
+		"transfers":     data.Transfers.ValueInt64(),
+		"enabled":       data.Enabled.ValueBool(),
+	}
+
+	// Add optional fields
+	if !data.BWLimit.IsNull() && !data.BWLimit.IsUnknown() {
+		params["bwlimit"] = data.BWLimit.ValueString()
+	}
+
+	params["follow_symlinks"] = data.FollowSymlinks.ValueBool()
+	params["create_empty_src_dirs"] = data.CreateEmptySrcDirs.ValueBool()
+
+	// Handle exclude list
+	if !data.Exclude.IsNull() && !data.Exclude.IsUnknown() {
+		var excludeItems []string
+		data.Exclude.ElementsAs(ctx, &excludeItems, false)
+		params["exclude"] = excludeItems
+	}
+
+	// Build schedule
+	if data.Schedule != nil {
+		params["schedule"] = map[string]any{
+			"minute": data.Schedule.Minute.ValueString(),
+			"hour":   data.Schedule.Hour.ValueString(),
+			"dom":    data.Schedule.Dom.ValueString(),
+			"month":  data.Schedule.Month.ValueString(),
+			"dow":    data.Schedule.Dow.ValueString(),
+		}
+	}
+
+	// Build attributes from provider block
+	attributes := getTaskAttributes(&data)
+	params["attributes"] = attributes
+
+	// Handle encryption
+	if data.Encryption != nil {
+		params["encryption"] = true
+		params["encryption_password"] = data.Encryption.Password.ValueString()
+		if !data.Encryption.Salt.IsNull() && !data.Encryption.Salt.IsUnknown() {
+			params["encryption_salt"] = data.Encryption.Salt.ValueString()
+		}
+	} else {
+		params["encryption"] = false
+	}
+
+	// Call API
+	result, err := r.client.Call(ctx, "cloudsync.create", params)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Create Cloud Sync Task",
+			fmt.Sprintf("Unable to create task: %s", err.Error()),
+		)
+		return
+	}
+
+	// Parse response to get ID
+	var createResp struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(result, &createResp); err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Parse Response",
+			fmt.Sprintf("Unable to parse create response: %s", err.Error()),
+		)
+		return
+	}
+
+	// Query to get full state
+	task, err := r.queryTask(ctx, createResp.ID)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Read Task",
+			fmt.Sprintf("Task created but unable to read: %s", err.Error()),
+		)
+		return
+	}
+
+	if task == nil {
+		resp.Diagnostics.AddError(
+			"Task Not Found",
+			"Task was created but could not be found.",
+		)
+		return
+	}
+
+	// Set state from response
+	r.mapTaskToModel(task, &data)
+
+	// Trigger sync if sync_on_change is true
+	if data.SyncOnChange.ValueBool() {
+		_, err := r.client.Call(ctx, "cloudsync.sync", createResp.ID)
+		if err != nil {
+			resp.Diagnostics.AddWarning(
+				"Sync Trigger Failed",
+				fmt.Sprintf("Task created but sync failed to trigger: %s", err.Error()),
+			)
+		}
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// queryTask queries a cloud sync task by ID and returns the response.
+func (r *CloudSyncTaskResource) queryTask(ctx context.Context, id int64) (*api.CloudSyncTaskResponse, error) {
+	filter := [][]any{{"id", "=", id}}
+	result, err := r.client.Call(ctx, "cloudsync.query", filter)
+	if err != nil {
+		return nil, err
+	}
+
+	var tasks []api.CloudSyncTaskResponse
+	if err := json.Unmarshal(result, &tasks); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	if len(tasks) == 0 {
+		return nil, nil
+	}
+
+	return &tasks[0], nil
+}
+
+// getTaskAttributes extracts attributes from the provider block.
+func getTaskAttributes(data *CloudSyncTaskResourceModel) map[string]any {
+	if data.S3 != nil {
+		attrs := map[string]any{
+			"bucket": data.S3.Bucket.ValueString(),
+		}
+		if !data.S3.Folder.IsNull() && !data.S3.Folder.IsUnknown() {
+			attrs["folder"] = data.S3.Folder.ValueString()
+		}
+		return attrs
+	}
+	if data.B2 != nil {
+		attrs := map[string]any{
+			"bucket": data.B2.Bucket.ValueString(),
+		}
+		if !data.B2.Folder.IsNull() && !data.B2.Folder.IsUnknown() {
+			attrs["folder"] = data.B2.Folder.ValueString()
+		}
+		return attrs
+	}
+	if data.GCS != nil {
+		attrs := map[string]any{
+			"bucket": data.GCS.Bucket.ValueString(),
+		}
+		if !data.GCS.Folder.IsNull() && !data.GCS.Folder.IsUnknown() {
+			attrs["folder"] = data.GCS.Folder.ValueString()
+		}
+		return attrs
+	}
+	if data.Azure != nil {
+		attrs := map[string]any{
+			"container": data.Azure.Container.ValueString(),
+		}
+		if !data.Azure.Folder.IsNull() && !data.Azure.Folder.IsUnknown() {
+			attrs["folder"] = data.Azure.Folder.ValueString()
+		}
+		return attrs
+	}
+	return map[string]any{}
+}
+
+// mapTaskToModel maps an API response to the resource model.
+func (r *CloudSyncTaskResource) mapTaskToModel(task *api.CloudSyncTaskResponse, data *CloudSyncTaskResourceModel) {
+	data.ID = types.StringValue(strconv.FormatInt(task.ID, 10))
+	data.Description = types.StringValue(task.Description)
+	data.Path = types.StringValue(task.Path)
+	data.Credentials = types.Int64Value(task.Credentials)
+	data.Direction = types.StringValue(strings.ToLower(task.Direction))
+	data.TransferMode = types.StringValue(strings.ToLower(task.TransferMode))
+	data.Snapshot = types.BoolValue(task.Snapshot)
+	data.Transfers = types.Int64Value(task.Transfers)
+	data.FollowSymlinks = types.BoolValue(task.FollowSymlinks)
+	data.CreateEmptySrcDirs = types.BoolValue(task.CreateEmptySrcDirs)
+	data.Enabled = types.BoolValue(task.Enabled)
+
+	if task.BWLimit != "" {
+		data.BWLimit = types.StringValue(task.BWLimit)
+	} else {
+		data.BWLimit = types.StringNull()
+	}
+
+	// Map schedule
+	if data.Schedule != nil {
+		data.Schedule.Minute = types.StringValue(task.Schedule.Minute)
+		data.Schedule.Hour = types.StringValue(task.Schedule.Hour)
+		data.Schedule.Dom = types.StringValue(task.Schedule.Dom)
+		data.Schedule.Month = types.StringValue(task.Schedule.Month)
+		data.Schedule.Dow = types.StringValue(task.Schedule.Dow)
+	}
+
+	// Note: encryption, provider blocks, and exclude are preserved from plan
+	// since API may not return complete information
 }
 
 func (r *CloudSyncTaskResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
