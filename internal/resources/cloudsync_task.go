@@ -557,7 +557,7 @@ func (r *CloudSyncTaskResource) mapTaskToModel(task *api.CloudSyncTaskResponse, 
 	data.ID = types.StringValue(strconv.FormatInt(task.ID, 10))
 	data.Description = types.StringValue(task.Description)
 	data.Path = types.StringValue(task.Path)
-	data.Credentials = types.Int64Value(task.Credentials)
+	data.Credentials = types.Int64Value(task.Credentials.ID)
 	data.Direction = types.StringValue(strings.ToLower(task.Direction))
 	data.TransferMode = types.StringValue(strings.ToLower(task.TransferMode))
 	data.Snapshot = types.BoolValue(task.Snapshot)
@@ -566,11 +566,8 @@ func (r *CloudSyncTaskResource) mapTaskToModel(task *api.CloudSyncTaskResponse, 
 	data.CreateEmptySrcDirs = types.BoolValue(task.CreateEmptySrcDirs)
 	data.Enabled = types.BoolValue(task.Enabled)
 
-	if task.BWLimit != "" {
-		data.BWLimit = types.StringValue(task.BWLimit)
-	} else {
-		data.BWLimit = types.StringNull()
-	}
+	// BWLimit is preserved from plan since API returns array format
+	// and we accept string format in Terraform
 
 	// Map schedule
 	if data.Schedule != nil {
