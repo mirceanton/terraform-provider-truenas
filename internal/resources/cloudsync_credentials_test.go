@@ -6,6 +6,7 @@ import (
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
 func TestNewCloudSyncCredentialsResource(t *testing.T) {
@@ -122,4 +123,162 @@ func TestCloudSyncCredentialsResource_Configure_WrongType(t *testing.T) {
 	if !resp.Diagnostics.HasError() {
 		t.Fatal("expected error for wrong ProviderData type")
 	}
+}
+
+// Test helpers
+
+func getCloudSyncCredentialsResourceSchema(t *testing.T) resource.SchemaResponse {
+	t.Helper()
+	r := NewCloudSyncCredentialsResource()
+	schemaReq := resource.SchemaRequest{}
+	schemaResp := &resource.SchemaResponse{}
+	r.Schema(context.Background(), schemaReq, schemaResp)
+	return *schemaResp
+}
+
+// cloudSyncCredentialsModelParams holds parameters for creating test model values.
+type cloudSyncCredentialsModelParams struct {
+	ID    interface{}
+	Name  interface{}
+	S3    *s3BlockParams
+	B2    *b2BlockParams
+	GCS   *gcsBlockParams
+	Azure *azureBlockParams
+}
+
+type s3BlockParams struct {
+	AccessKeyID     interface{}
+	SecretAccessKey interface{}
+	Endpoint        interface{}
+	Region          interface{}
+}
+
+type b2BlockParams struct {
+	Account interface{}
+	Key     interface{}
+}
+
+type gcsBlockParams struct {
+	ServiceAccountCredentials interface{}
+}
+
+type azureBlockParams struct {
+	Account interface{}
+	Key     interface{}
+}
+
+func createCloudSyncCredentialsModelValue(p cloudSyncCredentialsModelParams) tftypes.Value {
+	s3Value := tftypes.NewValue(tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"access_key_id":     tftypes.String,
+			"secret_access_key": tftypes.String,
+			"endpoint":          tftypes.String,
+			"region":            tftypes.String,
+		},
+	}, nil)
+	if p.S3 != nil {
+		s3Value = tftypes.NewValue(tftypes.Object{
+			AttributeTypes: map[string]tftypes.Type{
+				"access_key_id":     tftypes.String,
+				"secret_access_key": tftypes.String,
+				"endpoint":          tftypes.String,
+				"region":            tftypes.String,
+			},
+		}, map[string]tftypes.Value{
+			"access_key_id":     tftypes.NewValue(tftypes.String, p.S3.AccessKeyID),
+			"secret_access_key": tftypes.NewValue(tftypes.String, p.S3.SecretAccessKey),
+			"endpoint":          tftypes.NewValue(tftypes.String, p.S3.Endpoint),
+			"region":            tftypes.NewValue(tftypes.String, p.S3.Region),
+		})
+	}
+
+	b2Value := tftypes.NewValue(tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"account": tftypes.String,
+			"key":     tftypes.String,
+		},
+	}, nil)
+	if p.B2 != nil {
+		b2Value = tftypes.NewValue(tftypes.Object{
+			AttributeTypes: map[string]tftypes.Type{
+				"account": tftypes.String,
+				"key":     tftypes.String,
+			},
+		}, map[string]tftypes.Value{
+			"account": tftypes.NewValue(tftypes.String, p.B2.Account),
+			"key":     tftypes.NewValue(tftypes.String, p.B2.Key),
+		})
+	}
+
+	gcsValue := tftypes.NewValue(tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"service_account_credentials": tftypes.String,
+		},
+	}, nil)
+	if p.GCS != nil {
+		gcsValue = tftypes.NewValue(tftypes.Object{
+			AttributeTypes: map[string]tftypes.Type{
+				"service_account_credentials": tftypes.String,
+			},
+		}, map[string]tftypes.Value{
+			"service_account_credentials": tftypes.NewValue(tftypes.String, p.GCS.ServiceAccountCredentials),
+		})
+	}
+
+	azureValue := tftypes.NewValue(tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"account": tftypes.String,
+			"key":     tftypes.String,
+		},
+	}, nil)
+	if p.Azure != nil {
+		azureValue = tftypes.NewValue(tftypes.Object{
+			AttributeTypes: map[string]tftypes.Type{
+				"account": tftypes.String,
+				"key":     tftypes.String,
+			},
+		}, map[string]tftypes.Value{
+			"account": tftypes.NewValue(tftypes.String, p.Azure.Account),
+			"key":     tftypes.NewValue(tftypes.String, p.Azure.Key),
+		})
+	}
+
+	return tftypes.NewValue(tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"id":   tftypes.String,
+			"name": tftypes.String,
+			"s3": tftypes.Object{
+				AttributeTypes: map[string]tftypes.Type{
+					"access_key_id":     tftypes.String,
+					"secret_access_key": tftypes.String,
+					"endpoint":          tftypes.String,
+					"region":            tftypes.String,
+				},
+			},
+			"b2": tftypes.Object{
+				AttributeTypes: map[string]tftypes.Type{
+					"account": tftypes.String,
+					"key":     tftypes.String,
+				},
+			},
+			"gcs": tftypes.Object{
+				AttributeTypes: map[string]tftypes.Type{
+					"service_account_credentials": tftypes.String,
+				},
+			},
+			"azure": tftypes.Object{
+				AttributeTypes: map[string]tftypes.Type{
+					"account": tftypes.String,
+					"key":     tftypes.String,
+				},
+			},
+		},
+	}, map[string]tftypes.Value{
+		"id":    tftypes.NewValue(tftypes.String, p.ID),
+		"name":  tftypes.NewValue(tftypes.String, p.Name),
+		"s3":    s3Value,
+		"b2":    b2Value,
+		"gcs":   gcsValue,
+		"azure": azureValue,
+	})
 }
