@@ -6,6 +6,9 @@ import (
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 )
 
 var _ resource.Resource = &CloudSyncCredentialsResource{}
@@ -27,7 +30,87 @@ func (r *CloudSyncCredentialsResource) Metadata(ctx context.Context, req resourc
 }
 
 func (r *CloudSyncCredentialsResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
-	// TODO: implement
+	resp.Schema = schema.Schema{
+		Description: "Manages cloud sync credentials for backup tasks.",
+		Attributes: map[string]schema.Attribute{
+			"id": schema.StringAttribute{
+				Description: "Credential ID.",
+				Computed:    true,
+				PlanModifiers: []planmodifier.String{
+					stringplanmodifier.UseStateForUnknown(),
+				},
+			},
+			"name": schema.StringAttribute{
+				Description: "Credential name.",
+				Required:    true,
+			},
+		},
+		Blocks: map[string]schema.Block{
+			"s3": schema.SingleNestedBlock{
+				Description: "S3-compatible storage credentials.",
+				Attributes: map[string]schema.Attribute{
+					"access_key_id": schema.StringAttribute{
+						Description: "Access key ID.",
+						Required:    true,
+						Sensitive:   true,
+					},
+					"secret_access_key": schema.StringAttribute{
+						Description: "Secret access key.",
+						Required:    true,
+						Sensitive:   true,
+					},
+					"endpoint": schema.StringAttribute{
+						Description: "Custom endpoint URL for S3-compatible storage.",
+						Optional:    true,
+					},
+					"region": schema.StringAttribute{
+						Description: "Region.",
+						Optional:    true,
+					},
+				},
+			},
+			"b2": schema.SingleNestedBlock{
+				Description: "Backblaze B2 credentials.",
+				Attributes: map[string]schema.Attribute{
+					"account": schema.StringAttribute{
+						Description: "Account ID.",
+						Required:    true,
+						Sensitive:   true,
+					},
+					"key": schema.StringAttribute{
+						Description: "Application key.",
+						Required:    true,
+						Sensitive:   true,
+					},
+				},
+			},
+			"gcs": schema.SingleNestedBlock{
+				Description: "Google Cloud Storage credentials.",
+				Attributes: map[string]schema.Attribute{
+					"service_account_credentials": schema.StringAttribute{
+						Description: "Service account JSON credentials.",
+						Required:    true,
+						Sensitive:   true,
+					},
+				},
+			},
+			"azure": schema.SingleNestedBlock{
+				Description: "Azure Blob Storage credentials.",
+				Attributes: map[string]schema.Attribute{
+					"account": schema.StringAttribute{
+						Description: "Storage account name.",
+						Required:    true,
+						Sensitive:   true,
+					},
+					"key": schema.StringAttribute{
+						Description: "Account key.",
+						Required:    true,
+						Sensitive:   true,
+					},
+				},
+			},
+		},
+	}
 }
 
 func (r *CloudSyncCredentialsResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
