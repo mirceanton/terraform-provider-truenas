@@ -617,3 +617,51 @@ func TestCloudSyncCredentialsResource_Update_Success(t *testing.T) {
 		t.Errorf("expected Name 'Scaleway Updated', got %q", resultData.Name.ValueString())
 	}
 }
+
+func TestCloudSyncCredentialsResource_Delete_Success(t *testing.T) {
+	var capturedMethod string
+	var capturedID int64
+
+	r := &CloudSyncCredentialsResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				capturedMethod = method
+				capturedID = params.(int64)
+				return json.RawMessage(`true`), nil
+			},
+		},
+	}
+
+	schemaResp := getCloudSyncCredentialsResourceSchema(t)
+	stateValue := createCloudSyncCredentialsModelValue(cloudSyncCredentialsModelParams{
+		ID:   "5",
+		Name: "Scaleway",
+		S3: &s3BlockParams{
+			AccessKeyID:     "AKIATEST",
+			SecretAccessKey: "secret123",
+		},
+	})
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if capturedMethod != "cloudsync.credentials.delete" {
+		t.Errorf("expected method 'cloudsync.credentials.delete', got %q", capturedMethod)
+	}
+
+	if capturedID != 5 {
+		t.Errorf("expected ID 5, got %d", capturedID)
+	}
+}

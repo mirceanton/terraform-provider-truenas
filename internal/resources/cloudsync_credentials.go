@@ -398,7 +398,30 @@ func (r *CloudSyncCredentialsResource) Update(ctx context.Context, req resource.
 }
 
 func (r *CloudSyncCredentialsResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	// TODO: implement
+	var data CloudSyncCredentialsResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Invalid ID",
+			fmt.Sprintf("Unable to parse ID %q: %s", data.ID.ValueString(), err.Error()),
+		)
+		return
+	}
+
+	_, err = r.client.Call(ctx, "cloudsync.credentials.delete", id)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Delete Credentials",
+			fmt.Sprintf("Unable to delete credentials: %s", err.Error()),
+		)
+		return
+	}
 }
 
 func (r *CloudSyncCredentialsResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
