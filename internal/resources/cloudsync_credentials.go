@@ -278,8 +278,8 @@ func (r *CloudSyncCredentialsResource) Create(ctx context.Context, req resource.
 		return
 	}
 
-	provider, attributes := getProviderAndAttributes(&data)
-	if provider == "" {
+	providerType, attributes := getProviderAndAttributes(&data)
+	if providerType == "" {
 		resp.Diagnostics.AddError(
 			"Invalid Configuration",
 			"Exactly one provider block (s3, b2, gcs, or azure) must be specified.",
@@ -287,10 +287,17 @@ func (r *CloudSyncCredentialsResource) Create(ctx context.Context, req resource.
 		return
 	}
 
+	// Build provider object with type and attributes merged
+	providerObj := map[string]any{
+		"type": providerType,
+	}
+	for k, v := range attributes {
+		providerObj[k] = v
+	}
+
 	params := map[string]any{
-		"name":       data.Name.ValueString(),
-		"provider":   provider,
-		"attributes": attributes,
+		"name":     data.Name.ValueString(),
+		"provider": providerObj,
 	}
 
 	result, err := r.client.Call(ctx, "cloudsync.credentials.create", params)
@@ -402,8 +409,8 @@ func (r *CloudSyncCredentialsResource) Update(ctx context.Context, req resource.
 		return
 	}
 
-	provider, attributes := getProviderAndAttributes(&plan)
-	if provider == "" {
+	providerType, attributes := getProviderAndAttributes(&plan)
+	if providerType == "" {
 		resp.Diagnostics.AddError(
 			"Invalid Configuration",
 			"Exactly one provider block (s3, b2, gcs, or azure) must be specified.",
@@ -411,10 +418,17 @@ func (r *CloudSyncCredentialsResource) Update(ctx context.Context, req resource.
 		return
 	}
 
+	// Build provider object with type and attributes merged
+	providerObj := map[string]any{
+		"type": providerType,
+	}
+	for k, v := range attributes {
+		providerObj[k] = v
+	}
+
 	updateData := map[string]any{
-		"name":       plan.Name.ValueString(),
-		"provider":   provider,
-		"attributes": attributes,
+		"name":     plan.Name.ValueString(),
+		"provider": providerObj,
 	}
 
 	_, err = r.client.Call(ctx, "cloudsync.credentials.update", []any{id, updateData})

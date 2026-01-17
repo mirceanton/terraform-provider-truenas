@@ -2,10 +2,24 @@ package api
 
 // CloudSyncCredentialResponse represents a cloud sync credential from the API.
 type CloudSyncCredentialResponse struct {
-	ID         int64             `json:"id"`
-	Name       string            `json:"name"`
-	Provider   string            `json:"provider"`
-	Attributes map[string]string `json:"attributes"`
+	ID       int64                        `json:"id"`
+	Name     string                       `json:"name"`
+	Provider CloudSyncCredentialProvider  `json:"provider"`
+}
+
+// CloudSyncCredentialProvider contains the provider type and attributes.
+type CloudSyncCredentialProvider struct {
+	Type       string            `json:"type"`
+	// S3 attributes
+	AccessKeyID     string `json:"access_key_id,omitempty"`
+	SecretAccessKey string `json:"secret_access_key,omitempty"`
+	Endpoint        string `json:"endpoint,omitempty"`
+	Region          string `json:"region,omitempty"`
+	// B2 attributes
+	Account string `json:"account,omitempty"`
+	Key     string `json:"key,omitempty"`
+	// GCS attributes
+	ServiceAccountCredentials string `json:"service_account_credentials,omitempty"`
 }
 
 // CloudSyncTaskResponse represents a cloud sync task from the API.

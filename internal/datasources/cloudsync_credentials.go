@@ -125,7 +125,7 @@ func (d *CloudSyncCredentialsDataSource) Read(ctx context.Context, req datasourc
 	// Map response to model
 	data.ID = types.StringValue(fmt.Sprintf("%d", found.ID))
 	data.Name = types.StringValue(found.Name)
-	data.ProviderType = types.StringValue(mapAPIProviderToTerraform(found.Provider))
+	data.ProviderType = types.StringValue(mapAPIProviderToTerraform(found.Provider.Type))
 
 	// Save data into Terraform state
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)

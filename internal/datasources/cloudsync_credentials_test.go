@@ -171,8 +171,8 @@ func TestCloudSyncCredentialsDataSource_Read_Success_S3(t *testing.T) {
 				return json.RawMessage(`[{
 					"id": 5,
 					"name": "Scaleway",
-					"provider": "S3",
-					"attributes": {
+					"provider": {
+						"type": "S3",
 						"access_key_id": "AKIATEST",
 						"secret_access_key": "secret123"
 					}
@@ -225,8 +225,9 @@ func TestCloudSyncCredentialsDataSource_Read_Success_B2(t *testing.T) {
 				return json.RawMessage(`[{
 					"id": 6,
 					"name": "Backblaze",
-					"provider": "B2",
-					"attributes": {}
+					"provider": {
+						"type": "B2"
+					}
 				}]`), nil
 			},
 		},
@@ -271,8 +272,9 @@ func TestCloudSyncCredentialsDataSource_Read_Success_GCS(t *testing.T) {
 				return json.RawMessage(`[{
 					"id": 7,
 					"name": "GCS",
-					"provider": "GOOGLE_CLOUD_STORAGE",
-					"attributes": {}
+					"provider": {
+						"type": "GOOGLE_CLOUD_STORAGE"
+					}
 				}]`), nil
 			},
 		},
@@ -317,8 +319,9 @@ func TestCloudSyncCredentialsDataSource_Read_Success_Azure(t *testing.T) {
 				return json.RawMessage(`[{
 					"id": 8,
 					"name": "Azure",
-					"provider": "AZUREBLOB",
-					"attributes": {}
+					"provider": {
+						"type": "AZUREBLOB"
+					}
 				}]`), nil
 			},
 		},
@@ -391,9 +394,9 @@ func TestCloudSyncCredentialsDataSource_Read_MultipleCredentials_FindsMatch(t *t
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				// Return multiple credentials
 				return json.RawMessage(`[
-					{"id": 1, "name": "First", "provider": "S3", "attributes": {}},
-					{"id": 2, "name": "Target", "provider": "B2", "attributes": {}},
-					{"id": 3, "name": "Third", "provider": "AZUREBLOB", "attributes": {}}
+					{"id": 1, "name": "First", "provider": {"type": "S3"}},
+					{"id": 2, "name": "Target", "provider": {"type": "B2"}},
+					{"id": 3, "name": "Third", "provider": {"type": "AZUREBLOB"}}
 				]`), nil
 			},
 		},
@@ -497,8 +500,9 @@ func TestCloudSyncCredentialsDataSource_Read_UnknownProvider(t *testing.T) {
 				return json.RawMessage(`[{
 					"id": 9,
 					"name": "Unknown",
-					"provider": "DROPBOX",
-					"attributes": {}
+					"provider": {
+						"type": "DROPBOX"
+					}
 				}]`), nil
 			},
 		},

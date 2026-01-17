@@ -302,8 +302,8 @@ func TestCloudSyncCredentialsResource_Create_S3_Success(t *testing.T) {
 					return json.RawMessage(`[{
 						"id": 5,
 						"name": "Scaleway",
-						"provider": "S3",
-						"attributes": {
+						"provider": {
+							"type": "S3",
 							"access_key_id": "AKIATEST",
 							"secret_access_key": "secret123",
 							"endpoint": "s3.nl-ams.scw.cloud",
@@ -358,26 +358,26 @@ func TestCloudSyncCredentialsResource_Create_S3_Success(t *testing.T) {
 	if params["name"] != "Scaleway" {
 		t.Errorf("expected name 'Scaleway', got %v", params["name"])
 	}
-	if params["provider"] != "S3" {
-		t.Errorf("expected provider 'S3', got %v", params["provider"])
-	}
 
-	// Verify attributes were passed correctly
-	attrs, ok := params["attributes"].(map[string]any)
+	// Verify provider object was formed correctly (new format)
+	providerObj, ok := params["provider"].(map[string]any)
 	if !ok {
-		t.Fatal("expected attributes to be map[string]any")
+		t.Fatalf("expected provider to be map[string]any, got %T", params["provider"])
 	}
-	if attrs["access_key_id"] != "AKIATEST" {
-		t.Errorf("expected access_key_id 'AKIATEST', got %v", attrs["access_key_id"])
+	if providerObj["type"] != "S3" {
+		t.Errorf("expected provider type 'S3', got %v", providerObj["type"])
 	}
-	if attrs["secret_access_key"] != "secret123" {
-		t.Errorf("expected secret_access_key 'secret123', got %v", attrs["secret_access_key"])
+	if providerObj["access_key_id"] != "AKIATEST" {
+		t.Errorf("expected access_key_id 'AKIATEST', got %v", providerObj["access_key_id"])
 	}
-	if attrs["endpoint"] != "s3.nl-ams.scw.cloud" {
-		t.Errorf("expected endpoint 's3.nl-ams.scw.cloud', got %v", attrs["endpoint"])
+	if providerObj["secret_access_key"] != "secret123" {
+		t.Errorf("expected secret_access_key 'secret123', got %v", providerObj["secret_access_key"])
 	}
-	if attrs["region"] != "nl-ams" {
-		t.Errorf("expected region 'nl-ams', got %v", attrs["region"])
+	if providerObj["endpoint"] != "s3.nl-ams.scw.cloud" {
+		t.Errorf("expected endpoint 's3.nl-ams.scw.cloud', got %v", providerObj["endpoint"])
+	}
+	if providerObj["region"] != "nl-ams" {
+		t.Errorf("expected region 'nl-ams', got %v", providerObj["region"])
 	}
 
 	// Verify state was set correctly
@@ -395,8 +395,8 @@ func TestCloudSyncCredentialsResource_Read_Success(t *testing.T) {
 				return json.RawMessage(`[{
 					"id": 5,
 					"name": "Scaleway",
-					"provider": "S3",
-					"attributes": {
+					"provider": {
+						"type": "S3",
 						"access_key_id": "AKIATEST",
 						"secret_access_key": "secret123",
 						"endpoint": "s3.nl-ams.scw.cloud",
@@ -513,8 +513,8 @@ func TestCloudSyncCredentialsResource_Update_Success(t *testing.T) {
 					return json.RawMessage(`[{
 						"id": 5,
 						"name": "Scaleway Updated",
-						"provider": "S3",
-						"attributes": {
+						"provider": {
+							"type": "S3",
 							"access_key_id": "AKIATEST-UPDATED",
 							"secret_access_key": "newsecret456",
 							"endpoint": "s3.fr-par.scw.cloud",
@@ -586,26 +586,26 @@ func TestCloudSyncCredentialsResource_Update_Success(t *testing.T) {
 	if capturedUpdateData["name"] != "Scaleway Updated" {
 		t.Errorf("expected name 'Scaleway Updated', got %v", capturedUpdateData["name"])
 	}
-	if capturedUpdateData["provider"] != "S3" {
-		t.Errorf("expected provider 'S3', got %v", capturedUpdateData["provider"])
-	}
 
-	// Verify attributes were passed correctly
-	attrs, ok := capturedUpdateData["attributes"].(map[string]any)
+	// Verify provider object was formed correctly (new format)
+	providerObj, ok := capturedUpdateData["provider"].(map[string]any)
 	if !ok {
-		t.Fatal("expected attributes to be map[string]any")
+		t.Fatalf("expected provider to be map[string]any, got %T", capturedUpdateData["provider"])
 	}
-	if attrs["access_key_id"] != "AKIATEST-UPDATED" {
-		t.Errorf("expected access_key_id 'AKIATEST-UPDATED', got %v", attrs["access_key_id"])
+	if providerObj["type"] != "S3" {
+		t.Errorf("expected provider type 'S3', got %v", providerObj["type"])
 	}
-	if attrs["secret_access_key"] != "newsecret456" {
-		t.Errorf("expected secret_access_key 'newsecret456', got %v", attrs["secret_access_key"])
+	if providerObj["access_key_id"] != "AKIATEST-UPDATED" {
+		t.Errorf("expected access_key_id 'AKIATEST-UPDATED', got %v", providerObj["access_key_id"])
 	}
-	if attrs["endpoint"] != "s3.fr-par.scw.cloud" {
-		t.Errorf("expected endpoint 's3.fr-par.scw.cloud', got %v", attrs["endpoint"])
+	if providerObj["secret_access_key"] != "newsecret456" {
+		t.Errorf("expected secret_access_key 'newsecret456', got %v", providerObj["secret_access_key"])
 	}
-	if attrs["region"] != "fr-par" {
-		t.Errorf("expected region 'fr-par', got %v", attrs["region"])
+	if providerObj["endpoint"] != "s3.fr-par.scw.cloud" {
+		t.Errorf("expected endpoint 's3.fr-par.scw.cloud', got %v", providerObj["endpoint"])
+	}
+	if providerObj["region"] != "fr-par" {
+		t.Errorf("expected region 'fr-par', got %v", providerObj["region"])
 	}
 
 	// Verify state was set correctly after update
@@ -865,8 +865,8 @@ func TestCloudSyncCredentialsResource_Create_B2_Success(t *testing.T) {
 					return json.RawMessage(`[{
 						"id": 6,
 						"name": "Backblaze",
-						"provider": "B2",
-						"attributes": {
+						"provider": {
+							"type": "B2",
 							"account": "account123",
 							"key": "key456"
 						}
@@ -913,20 +913,20 @@ func TestCloudSyncCredentialsResource_Create_B2_Success(t *testing.T) {
 	if params["name"] != "Backblaze" {
 		t.Errorf("expected name 'Backblaze', got %v", params["name"])
 	}
-	if params["provider"] != "B2" {
-		t.Errorf("expected provider 'B2', got %v", params["provider"])
-	}
 
-	// Verify attributes were passed correctly
-	attrs, ok := params["attributes"].(map[string]any)
+	// Verify provider object was formed correctly (new format)
+	providerObj, ok := params["provider"].(map[string]any)
 	if !ok {
-		t.Fatal("expected attributes to be map[string]any")
+		t.Fatalf("expected provider to be map[string]any, got %T", params["provider"])
 	}
-	if attrs["account"] != "account123" {
-		t.Errorf("expected account 'account123', got %v", attrs["account"])
+	if providerObj["type"] != "B2" {
+		t.Errorf("expected provider type 'B2', got %v", providerObj["type"])
 	}
-	if attrs["key"] != "key456" {
-		t.Errorf("expected key 'key456', got %v", attrs["key"])
+	if providerObj["account"] != "account123" {
+		t.Errorf("expected account 'account123', got %v", providerObj["account"])
+	}
+	if providerObj["key"] != "key456" {
+		t.Errorf("expected key 'key456', got %v", providerObj["key"])
 	}
 
 	// Verify state was set correctly
@@ -951,8 +951,8 @@ func TestCloudSyncCredentialsResource_Create_GCS_Success(t *testing.T) {
 					return json.RawMessage(`[{
 						"id": 7,
 						"name": "GCS",
-						"provider": "GOOGLE_CLOUD_STORAGE",
-						"attributes": {
+						"provider": {
+							"type": "GOOGLE_CLOUD_STORAGE",
 							"service_account_credentials": "{\"type\": \"service_account\"}"
 						}
 					}]`), nil
@@ -997,17 +997,17 @@ func TestCloudSyncCredentialsResource_Create_GCS_Success(t *testing.T) {
 	if params["name"] != "GCS" {
 		t.Errorf("expected name 'GCS', got %v", params["name"])
 	}
-	if params["provider"] != "GOOGLE_CLOUD_STORAGE" {
-		t.Errorf("expected provider 'GOOGLE_CLOUD_STORAGE', got %v", params["provider"])
-	}
 
-	// Verify attributes were passed correctly
-	attrs, ok := params["attributes"].(map[string]any)
+	// Verify provider object was formed correctly (new format)
+	providerObj, ok := params["provider"].(map[string]any)
 	if !ok {
-		t.Fatal("expected attributes to be map[string]any")
+		t.Fatalf("expected provider to be map[string]any, got %T", params["provider"])
 	}
-	if attrs["service_account_credentials"] != `{"type": "service_account"}` {
-		t.Errorf("expected service_account_credentials '{\"type\": \"service_account\"}', got %v", attrs["service_account_credentials"])
+	if providerObj["type"] != "GOOGLE_CLOUD_STORAGE" {
+		t.Errorf("expected provider type 'GOOGLE_CLOUD_STORAGE', got %v", providerObj["type"])
+	}
+	if providerObj["service_account_credentials"] != `{"type": "service_account"}` {
+		t.Errorf("expected service_account_credentials '{\"type\": \"service_account\"}', got %v", providerObj["service_account_credentials"])
 	}
 
 	// Verify state was set correctly
@@ -1032,8 +1032,8 @@ func TestCloudSyncCredentialsResource_Create_Azure_Success(t *testing.T) {
 					return json.RawMessage(`[{
 						"id": 8,
 						"name": "Azure",
-						"provider": "AZUREBLOB",
-						"attributes": {
+						"provider": {
+							"type": "AZUREBLOB",
 							"account": "storageaccount",
 							"key": "accountkey"
 						}
@@ -1080,20 +1080,20 @@ func TestCloudSyncCredentialsResource_Create_Azure_Success(t *testing.T) {
 	if params["name"] != "Azure" {
 		t.Errorf("expected name 'Azure', got %v", params["name"])
 	}
-	if params["provider"] != "AZUREBLOB" {
-		t.Errorf("expected provider 'AZUREBLOB', got %v", params["provider"])
-	}
 
-	// Verify attributes were passed correctly
-	attrs, ok := params["attributes"].(map[string]any)
+	// Verify provider object was formed correctly (new format)
+	providerObj, ok := params["provider"].(map[string]any)
 	if !ok {
-		t.Fatal("expected attributes to be map[string]any")
+		t.Fatalf("expected provider to be map[string]any, got %T", params["provider"])
 	}
-	if attrs["account"] != "storageaccount" {
-		t.Errorf("expected account 'storageaccount', got %v", attrs["account"])
+	if providerObj["type"] != "AZUREBLOB" {
+		t.Errorf("expected provider type 'AZUREBLOB', got %v", providerObj["type"])
 	}
-	if attrs["key"] != "accountkey" {
-		t.Errorf("expected key 'accountkey', got %v", attrs["key"])
+	if providerObj["account"] != "storageaccount" {
+		t.Errorf("expected account 'storageaccount', got %v", providerObj["account"])
+	}
+	if providerObj["key"] != "accountkey" {
+		t.Errorf("expected key 'accountkey', got %v", providerObj["key"])
 	}
 
 	// Verify state was set correctly
