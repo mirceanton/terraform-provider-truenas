@@ -735,6 +735,48 @@ func TestCloudSyncCredentialsResource_Create_NoProviderBlock(t *testing.T) {
 	}
 }
 
+func TestCloudSyncCredentialsResource_Create_S3_MissingRequiredFields(t *testing.T) {
+	r := &CloudSyncCredentialsResource{
+		client: &client.MockClient{},
+	}
+
+	schemaResp := getCloudSyncCredentialsResourceSchema(t)
+	// Create S3 block with missing required fields (access_key_id and secret_access_key are nil)
+	planValue := createCloudSyncCredentialsModelValue(cloudSyncCredentialsModelParams{
+		Name: "Test S3 Missing Fields",
+		S3: &s3BlockParams{
+			// access_key_id and secret_access_key are nil - should fail validation
+			Endpoint: "https://s3.example.com",
+		},
+	})
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when S3 block is missing required fields")
+	}
+
+	// Verify the error messages mention the missing fields
+	errStr := resp.Diagnostics.Errors()[0].Detail()
+	if errStr != "s3.access_key_id is required when s3 block is specified" &&
+		errStr != "s3.secret_access_key is required when s3 block is specified" {
+		t.Errorf("expected error about missing s3 required field, got: %s", errStr)
+	}
+}
+
 func TestCloudSyncCredentialsResource_Read_APIError(t *testing.T) {
 	r := &CloudSyncCredentialsResource{
 		client: &client.MockClient{

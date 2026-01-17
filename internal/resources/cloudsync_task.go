@@ -235,7 +235,7 @@ func (r *CloudSyncTaskResource) Schema(ctx context.Context, req resource.SchemaR
 				Attributes: map[string]schema.Attribute{
 					"bucket": schema.StringAttribute{
 						Description: "Bucket name.",
-						Required:    true,
+						Optional:    true,
 					},
 					"folder": schema.StringAttribute{
 						Description: "Folder path within the bucket.",
@@ -248,7 +248,7 @@ func (r *CloudSyncTaskResource) Schema(ctx context.Context, req resource.SchemaR
 				Attributes: map[string]schema.Attribute{
 					"bucket": schema.StringAttribute{
 						Description: "Bucket name.",
-						Required:    true,
+						Optional:    true,
 					},
 					"folder": schema.StringAttribute{
 						Description: "Folder path within the bucket.",
@@ -261,7 +261,7 @@ func (r *CloudSyncTaskResource) Schema(ctx context.Context, req resource.SchemaR
 				Attributes: map[string]schema.Attribute{
 					"bucket": schema.StringAttribute{
 						Description: "Bucket name.",
-						Required:    true,
+						Optional:    true,
 					},
 					"folder": schema.StringAttribute{
 						Description: "Folder path within the bucket.",
@@ -274,7 +274,7 @@ func (r *CloudSyncTaskResource) Schema(ctx context.Context, req resource.SchemaR
 				Attributes: map[string]schema.Attribute{
 					"container": schema.StringAttribute{
 						Description: "Container name.",
-						Required:    true,
+						Optional:    true,
 					},
 					"folder": schema.StringAttribute{
 						Description: "Folder path within the container.",
@@ -330,6 +330,14 @@ func (r *CloudSyncTaskResource) Create(ctx context.Context, req resource.CreateR
 			"Invalid Configuration",
 			"Exactly one provider block (s3, b2, gcs, or azure) must be specified.",
 		)
+		return
+	}
+
+	// Validate required fields within provider blocks
+	if validationErrors := validateTaskProviderBlock(&data); len(validationErrors) > 0 {
+		for _, err := range validationErrors {
+			resp.Diagnostics.AddError("Invalid Configuration", err)
+		}
 		return
 	}
 
@@ -470,6 +478,34 @@ func buildCloudSyncTaskParams(ctx context.Context, data *CloudSyncTaskResourceMo
 	return params
 }
 
+// validateTaskProviderBlock validates that required fields are present in the specified provider block.
+func validateTaskProviderBlock(data *CloudSyncTaskResourceModel) []string {
+	var errors []string
+
+	if data.S3 != nil {
+		if data.S3.Bucket.IsNull() || data.S3.Bucket.ValueString() == "" {
+			errors = append(errors, "s3.bucket is required when s3 block is specified")
+		}
+	}
+	if data.B2 != nil {
+		if data.B2.Bucket.IsNull() || data.B2.Bucket.ValueString() == "" {
+			errors = append(errors, "b2.bucket is required when b2 block is specified")
+		}
+	}
+	if data.GCS != nil {
+		if data.GCS.Bucket.IsNull() || data.GCS.Bucket.ValueString() == "" {
+			errors = append(errors, "gcs.bucket is required when gcs block is specified")
+		}
+	}
+	if data.Azure != nil {
+		if data.Azure.Container.IsNull() || data.Azure.Container.ValueString() == "" {
+			errors = append(errors, "azure.container is required when azure block is specified")
+		}
+	}
+
+	return errors
+}
+
 // getTaskAttributes extracts attributes from the provider block.
 func getTaskAttributes(data *CloudSyncTaskResourceModel) map[string]any {
 	if data.S3 != nil {
@@ -588,6 +624,14 @@ func (r *CloudSyncTaskResource) Update(ctx context.Context, req resource.UpdateR
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Validate required fields within provider blocks
+	if validationErrors := validateTaskProviderBlock(&plan); len(validationErrors) > 0 {
+		for _, err := range validationErrors {
+			resp.Diagnostics.AddError("Invalid Configuration", err)
+		}
 		return
 	}
 

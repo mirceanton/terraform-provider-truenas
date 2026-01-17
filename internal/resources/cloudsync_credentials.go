@@ -91,12 +91,12 @@ func (r *CloudSyncCredentialsResource) Schema(ctx context.Context, req resource.
 				Attributes: map[string]schema.Attribute{
 					"access_key_id": schema.StringAttribute{
 						Description: "Access key ID.",
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 					},
 					"secret_access_key": schema.StringAttribute{
 						Description: "Secret access key.",
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 					},
 					"endpoint": schema.StringAttribute{
@@ -114,12 +114,12 @@ func (r *CloudSyncCredentialsResource) Schema(ctx context.Context, req resource.
 				Attributes: map[string]schema.Attribute{
 					"account": schema.StringAttribute{
 						Description: "Account ID.",
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 					},
 					"key": schema.StringAttribute{
 						Description: "Application key.",
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 					},
 				},
@@ -129,7 +129,7 @@ func (r *CloudSyncCredentialsResource) Schema(ctx context.Context, req resource.
 				Attributes: map[string]schema.Attribute{
 					"service_account_credentials": schema.StringAttribute{
 						Description: "Service account JSON credentials.",
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 					},
 				},
@@ -139,12 +139,12 @@ func (r *CloudSyncCredentialsResource) Schema(ctx context.Context, req resource.
 				Attributes: map[string]schema.Attribute{
 					"account": schema.StringAttribute{
 						Description: "Storage account name.",
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 					},
 					"key": schema.StringAttribute{
 						Description: "Account key.",
-						Required:    true,
+						Optional:    true,
 						Sensitive:   true,
 					},
 				},
@@ -190,6 +190,43 @@ func (r *CloudSyncCredentialsResource) queryCredential(ctx context.Context, id i
 	return &credentials[0], nil
 }
 
+// validateProviderBlock validates that required fields are present in the specified provider block.
+func validateProviderBlock(data *CloudSyncCredentialsResourceModel) []string {
+	var errors []string
+
+	if data.S3 != nil {
+		if data.S3.AccessKeyID.IsNull() || data.S3.AccessKeyID.ValueString() == "" {
+			errors = append(errors, "s3.access_key_id is required when s3 block is specified")
+		}
+		if data.S3.SecretAccessKey.IsNull() || data.S3.SecretAccessKey.ValueString() == "" {
+			errors = append(errors, "s3.secret_access_key is required when s3 block is specified")
+		}
+	}
+	if data.B2 != nil {
+		if data.B2.Account.IsNull() || data.B2.Account.ValueString() == "" {
+			errors = append(errors, "b2.account is required when b2 block is specified")
+		}
+		if data.B2.Key.IsNull() || data.B2.Key.ValueString() == "" {
+			errors = append(errors, "b2.key is required when b2 block is specified")
+		}
+	}
+	if data.GCS != nil {
+		if data.GCS.ServiceAccountCredentials.IsNull() || data.GCS.ServiceAccountCredentials.ValueString() == "" {
+			errors = append(errors, "gcs.service_account_credentials is required when gcs block is specified")
+		}
+	}
+	if data.Azure != nil {
+		if data.Azure.Account.IsNull() || data.Azure.Account.ValueString() == "" {
+			errors = append(errors, "azure.account is required when azure block is specified")
+		}
+		if data.Azure.Key.IsNull() || data.Azure.Key.ValueString() == "" {
+			errors = append(errors, "azure.key is required when azure block is specified")
+		}
+	}
+
+	return errors
+}
+
 // getProviderAndAttributes extracts provider type and attributes from the model.
 func getProviderAndAttributes(data *CloudSyncCredentialsResourceModel) (string, map[string]any) {
 	if data.S3 != nil {
@@ -230,6 +267,14 @@ func (r *CloudSyncCredentialsResource) Create(ctx context.Context, req resource.
 
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Validate required fields within provider blocks
+	if validationErrors := validateProviderBlock(&data); len(validationErrors) > 0 {
+		for _, err := range validationErrors {
+			resp.Diagnostics.AddError("Invalid Configuration", err)
+		}
 		return
 	}
 
@@ -337,6 +382,14 @@ func (r *CloudSyncCredentialsResource) Update(ctx context.Context, req resource.
 	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
 	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Validate required fields within provider blocks
+	if validationErrors := validateProviderBlock(&plan); len(validationErrors) > 0 {
+		for _, err := range validationErrors {
+			resp.Diagnostics.AddError("Invalid Configuration", err)
+		}
 		return
 	}
 
