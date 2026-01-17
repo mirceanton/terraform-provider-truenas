@@ -1562,7 +1562,7 @@ func TestCloudSyncTaskResource_Create_MultipleProviderBlocks(t *testing.T) {
 	}
 }
 
-func TestCloudSyncTaskResource_Create_ScheduleDefaults(t *testing.T) {
+func TestCloudSyncTaskResource_Create_ScheduleWithWildcards(t *testing.T) {
 	var capturedParams any
 
 	r := &CloudSyncTaskResource{
@@ -1575,7 +1575,7 @@ func TestCloudSyncTaskResource_Create_ScheduleDefaults(t *testing.T) {
 				if method == "cloudsync.query" {
 					return json.RawMessage(`[{
 						"id": 20,
-						"description": "Schedule Defaults Test",
+						"description": "Schedule Wildcards Test",
 						"path": "/mnt/tank/data",
 						"credentials": 5,
 						"attributes": {"bucket": "test-bucket", "folder": "/"},
@@ -1596,10 +1596,10 @@ func TestCloudSyncTaskResource_Create_ScheduleDefaults(t *testing.T) {
 	}
 
 	schemaResp := getCloudSyncTaskResourceSchema(t)
-	// Only provide required schedule fields (minute, hour)
-	// dom, month, dow should default to "*"
+	// Test schedule with explicit wildcard values for dom, month, and dow
+	// This verifies wildcards are correctly passed through to the API
 	planValue := createCloudSyncTaskModelValue(cloudSyncTaskModelParams{
-		Description:  "Schedule Defaults Test",
+		Description:  "Schedule Wildcards Test",
 		Path:         "/mnt/tank/data",
 		Credentials:  5,
 		Direction:    "push",
@@ -1657,15 +1657,15 @@ func TestCloudSyncTaskResource_Create_ScheduleDefaults(t *testing.T) {
 		t.Errorf("expected schedule hour '3', got %v", schedule["hour"])
 	}
 
-	// Verify default fields have wildcard values
+	// Verify wildcard fields are passed correctly to the API
 	if schedule["dom"] != "*" {
-		t.Errorf("expected schedule dom '*' (default), got %v", schedule["dom"])
+		t.Errorf("expected schedule dom '*', got %v", schedule["dom"])
 	}
 	if schedule["month"] != "*" {
-		t.Errorf("expected schedule month '*' (default), got %v", schedule["month"])
+		t.Errorf("expected schedule month '*', got %v", schedule["month"])
 	}
 	if schedule["dow"] != "*" {
-		t.Errorf("expected schedule dow '*' (default), got %v", schedule["dow"])
+		t.Errorf("expected schedule dow '*', got %v", schedule["dow"])
 	}
 
 	// Verify state was set correctly
