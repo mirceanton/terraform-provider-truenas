@@ -6,43 +6,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
-## [0.5.0] - 2026-01-16
+## [0.6.0] - 2026-01-18
 
 
 ### Added
 
-- **snapshot:** Add resource scaffold and schema
-- **snapshot:** Implement Create with hold support
-- **snapshot:** Implement Read with not-found handling
-- **snapshot:** Implement Update for hold/release
-- **snapshot:** Implement Delete with hold release and error tests
-- **snapshots:** Add data source scaffold and schema
-- **snapshots:** Implement data source with filtering
-- **dataset:** Add snapshot_id for clone creation
+- **api:** Add cloud sync API response types
+- **resources:** Add cloud sync credentials resource skeleton
+- **resources:** Implement cloud sync credentials schema with provider blocks
+- **resources:** Implement cloud sync credentials Configure
+- **resources:** Add cloud sync credentials model types
+- **resources:** Implement cloud sync credentials Create for S3
+- **resources:** Implement cloud sync credentials Read
+- **resources:** Implement cloud sync credentials Update
+- **resources:** Implement cloud sync credentials Delete
+- **provider:** Register cloud sync credentials resource
+- **resources:** Add cloud sync task resource skeleton
+- **resources:** Implement cloud sync task schema and model types
+- **resources:** Implement cloud sync task Create
+- **resources:** Implement cloud sync task Read
+- **resources:** Implement cloud sync task Update
+- **resources:** Implement cloud sync task Delete
+- **provider:** Register cloud sync task resource
+- **datasources:** Add cloud sync credentials data source
+
+### Changed
+
+- Replace WriteFile positional parameters with structured WriteFileParams
 
 ### Documentation
 
-- Add snapshot resource design
-- Add snapshot implementation plan
-- Add snapshot resource and data source documentation
-- Add version-aware API resolution design
+- Add cloud sync resources design
+- Add cloud sync implementation plan with TDD
+- Add cloud sync resource documentation
 
 ### Fixed
 
-- Version-aware API resolution and desired_state normalization
-- Parse system.version as raw string, not JSON
-- **snapshot:** Correct API field mapping for name and hold detection
-- **app:** Add UseStateForUnknown to state attribute
-- **app:** Smart plan modifier for computed state attribute
+- **resources:** Change provider block attributes to Optional with runtime validation
+- **resources:** Change encryption.password to Optional with runtime validation
+- Correct cloud sync credentials provider payload structure
+- Correct CloudSync API object types for credentials and bandwidth limits
 
 ### Testing
 
-- **snapshot:** Add schema and configure tests
-- **snapshot:** Add ImportState test
-- **provider:** Update expected counts for snapshot resource and data source
-- Add comprehensive error handling and edge case tests for snapshot operations
+- **resources:** Add cloud sync credentials metadata test
+- **resources:** Add cloud sync credentials test helpers
+- **resources:** Add cloud sync credentials error path tests
+- **resources:** Add B2, GCS, Azure provider create tests
+- **resources:** Add cloud sync credentials import test
+- **resources:** Add cloud sync task test helpers
+- **resources:** Add cloud sync task error path tests
+- **resources:** Add provider-specific create tests for cloud sync task
+- **resources:** Add schedule validation tests for cloud sync task
+- **resources:** Add schedule validation tests for cloud sync task
+- **resources:** Add encryption tests for cloud sync task
 
-## [0.4.0] - 2026-01-15
+## [0.5.0] - 2026-01-16
 
 
 ### Added
@@ -58,22 +77,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **app:** Handle desired_state reconciliation in Update lifecycle
 - **app:** Preserve desired_state in Read lifecycle
 - Add job logs excerpt to error reporting
+- **snapshot:** Add resource scaffold and schema
+- **snapshot:** Implement Create with hold support
+- **snapshot:** Implement Read with not-found handling
+- **snapshot:** Implement Update for hold/release
+- **snapshot:** Implement Delete with hold release and error tests
+- **snapshots:** Add data source scaffold and schema
+- **snapshots:** Implement data source with filtering
+- **dataset:** Add snapshot_id for clone creation
 
 ### Documentation
 
 - Add design for desired_state attribute on truenas_app
 - Add implementation plan for desired_state attribute
 - Add desired_state and state_timeout to app resource docs
+- Add snapshot resource design
+- Add snapshot implementation plan
+- Add snapshot resource and data source documentation
+- Add version-aware API resolution design
+
+### Fixed
+
+- Version-aware API resolution and desired_state normalization
+- Parse system.version as raw string, not JSON
+- **snapshot:** Correct API field mapping for name and hold detection
+- **app:** Add UseStateForUnknown to state attribute
+- **app:** Smart plan modifier for computed state attribute
 
 ### Testing
 
 - **app:** Add CRASHED state handling tests
 - Expand test coverage for edge cases and error handling
 - Add comprehensive tests for TrueNAS job logs excerpt handling
+- **snapshot:** Add schema and configure tests
+- **snapshot:** Add ImportState test
+- **provider:** Update expected counts for snapshot resource and data source
+- Add comprehensive error handling and edge case tests for snapshot operations
 
 ### Build
 
 - Enable git-cliff for automated changelog generation
+
+### Ci
+
+- Fix release process with git-cliff integration
 
 ## [0.3.0] - 2026-01-14
 
