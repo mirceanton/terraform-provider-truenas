@@ -18,3 +18,6 @@ dist/
 coverage.out
 coverage.html
 terraform-provider-truenas_v*
+
+# Beads issue tracking
+.beads/
