@@ -1,0 +1,58 @@
+[
+  {
+    "name": "my-custom-app",
+    "id": "my-custom-app",
+    "state": "RUNNING",
+    "version": "1.0.0",
+    "human_version": "1.0.0",
+    "upgrade_available": false,
+    "latest_version": null,
+    "image_updates_available": false,
+    "custom_app": true,
+    "migrated": false,
+    "metadata": {
+      "name": "my-custom-app",
+      "train": "custom",
+      "description": "Custom Docker Compose application",
+      "app_version": "1.0.0",
+      "icon": null,
+      "categories": [],
+      "keywords": [],
+      "home": "",
+      "sources": []
+    },
+    "notes": null,
+    "portals": {},
+    "version_details": null,
+    "config": {
+      "services": {
+        "web": {
+          "image": "nginx:latest",
+          "ports": ["80:80"]
+        }
+      }
+    },
+    "active_workloads": {
+      "containers": 1,
+      "used_ports": [
+        {
+          "container_port": 80,
+          "host_port": 80,
+          "protocol": "tcp"
+        }
+      ],
+      "used_host_ips": [],
+      "container_details": [
+        {
+          "id": "abc123def456",
+          "service_name": "web",
+          "image": "nginx:latest",
+          "state": "running"
+        }
+      ],
+      "volumes": [],
+      "images": ["nginx:latest"],
+      "networks": ["my-custom-app_default"]
+    }
+  }
+]

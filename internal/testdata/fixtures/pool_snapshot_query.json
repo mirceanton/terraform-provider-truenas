@@ -1,0 +1,142 @@
+[
+  {
+    "id": "tank/data@daily-2025-10-15",
+    "name": "tank/data@daily-2025-10-15",
+    "snapshot_name": "daily-2025-10-15",
+    "dataset": "tank/data",
+    "type": "SNAPSHOT",
+    "pool": "tank",
+    "properties": {
+      "createtxg": {
+        "parsed": "12345",
+        "rawvalue": "12345",
+        "value": "12345",
+        "source": "NONE",
+        "source_info": null
+      },
+      "creation": {
+        "parsed": {
+          "$date": "2025-10-15T00:00:00.000Z"
+        },
+        "rawvalue": "1729000800",
+        "value": "Tue Oct 15  0:00 2025",
+        "source": "NONE",
+        "source_info": null
+      },
+      "used": {
+        "parsed": 268435456,
+        "rawvalue": "268435456",
+        "value": "256M",
+        "source": "NONE",
+        "source_info": null
+      },
+      "referenced": {
+        "parsed": 536870912,
+        "rawvalue": "536870912",
+        "value": "512M",
+        "source": "NONE",
+        "source_info": null
+      },
+      "compressratio": {
+        "parsed": "1.50x",
+        "rawvalue": "1.50",
+        "value": "1.50x",
+        "source": "NONE",
+        "source_info": null
+      },
+      "userrefs": {
+        "parsed": "0",
+        "rawvalue": "0",
+        "value": "0",
+        "source": "NONE",
+        "source_info": null
+      },
+      "clones": {
+        "parsed": "",
+        "rawvalue": "",
+        "value": "",
+        "source": "NONE",
+        "source_info": null
+      },
+      "defer_destroy": {
+        "parsed": false,
+        "rawvalue": "off",
+        "value": "off",
+        "source": "NONE",
+        "source_info": null
+      }
+    },
+    "holds": {}
+  },
+  {
+    "id": "tank/data@manual-backup",
+    "name": "tank/data@manual-backup",
+    "snapshot_name": "manual-backup",
+    "dataset": "tank/data",
+    "type": "SNAPSHOT",
+    "pool": "tank",
+    "properties": {
+      "createtxg": {
+        "parsed": "12340",
+        "rawvalue": "12340",
+        "value": "12340",
+        "source": "NONE",
+        "source_info": null
+      },
+      "creation": {
+        "parsed": {
+          "$date": "2025-10-14T12:00:00.000Z"
+        },
+        "rawvalue": "1728957600",
+        "value": "Mon Oct 14 12:00 2025",
+        "source": "NONE",
+        "source_info": null
+      },
+      "used": {
+        "parsed": 134217728,
+        "rawvalue": "134217728",
+        "value": "128M",
+        "source": "NONE",
+        "source_info": null
+      },
+      "referenced": {
+        "parsed": 268435456,
+        "rawvalue": "268435456",
+        "value": "256M",
+        "source": "NONE",
+        "source_info": null
+      },
+      "compressratio": {
+        "parsed": "1.25x",
+        "rawvalue": "1.25",
+        "value": "1.25x",
+        "source": "NONE",
+        "source_info": null
+      },
+      "userrefs": {
+        "parsed": "1",
+        "rawvalue": "1",
+        "value": "1",
+        "source": "NONE",
+        "source_info": null
+      },
+      "clones": {
+        "parsed": "",
+        "rawvalue": "",
+        "value": "",
+        "source": "NONE",
+        "source_info": null
+      },
+      "defer_destroy": {
+        "parsed": false,
+        "rawvalue": "off",
+        "value": "off",
+        "source": "NONE",
+        "source_info": null
+      }
+    },
+    "holds": {
+      "terraform": 1729000000
+    }
+  }
+]

@@ -1,0 +1,23 @@
+{
+  "realpath": "/mnt/tank/data",
+  "type": "DIRECTORY",
+  "size": 4096,
+  "allocation_size": 4096,
+  "mode": 16877,
+  "mount_id": 42,
+  "uid": 1000,
+  "gid": 1000,
+  "atime": 1729000000.123456,
+  "mtime": 1728900000.654321,
+  "ctime": 1728900000.654321,
+  "btime": 1728800000.000000,
+  "dev": 64769,
+  "inode": 256,
+  "nlink": 5,
+  "acl": true,
+  "is_mountpoint": true,
+  "is_ctldir": false,
+  "attributes": [],
+  "user": "apps",
+  "group": "apps"
+}

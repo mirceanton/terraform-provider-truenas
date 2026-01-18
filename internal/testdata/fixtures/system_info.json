@@ -1,0 +1,27 @@
+{
+  "version": "TrueNAS-SCALE-25.10.0",
+  "buildtime": {
+    "$date": "2025-10-15T12:00:00.000Z"
+  },
+  "hostname": "truenas-test",
+  "physmem": 17179869184,
+  "model": "Intel(R) Core(TM) i7-10700 CPU @ 2.90GHz",
+  "cores": 16,
+  "physical_cores": 8,
+  "loadavg": [0.5, 0.75, 0.85],
+  "uptime": "7 days, 3:45:12",
+  "uptime_seconds": 618312.45,
+  "system_serial": "ABC123456",
+  "system_product": "ProLiant DL380 Gen10",
+  "system_product_version": "1.0",
+  "license": null,
+  "boottime": {
+    "$date": "2025-10-08T08:30:00.000Z"
+  },
+  "datetime": {
+    "$date": "2025-10-15T12:15:12.000Z"
+  },
+  "timezone": "America/Los_Angeles",
+  "system_manufacturer": "HPE",
+  "ecc_memory": true
+}

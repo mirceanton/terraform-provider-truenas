@@ -1,0 +1,154 @@
+[
+  {
+    "id": 1,
+    "name": "tank",
+    "guid": "12345678901234567890",
+    "path": "/mnt/tank",
+    "status": "ONLINE",
+    "healthy": true,
+    "warning": false,
+    "status_code": "FEAT_DISABLED",
+    "status_detail": null,
+    "size": 21474836480,
+    "allocated": 5368709120,
+    "free": 16106127360,
+    "freeing": 0,
+    "fragmentation": "5%",
+    "autotrim": {
+      "parsed": false,
+      "rawvalue": "off",
+      "value": "off",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "topology": {
+      "data": [
+        {
+          "type": "MIRROR",
+          "path": null,
+          "guid": "9876543210987654321",
+          "status": "ONLINE",
+          "stats": {
+            "size": 21474836480,
+            "allocated": 5368709120,
+            "free": 16106127360,
+            "fragmentation": 5,
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0
+          },
+          "children": [
+            {
+              "type": "DISK",
+              "path": "/dev/sda1",
+              "guid": "1111111111111111111",
+              "status": "ONLINE",
+              "stats": {
+                "size": 21474836480,
+                "read_errors": 0,
+                "write_errors": 0,
+                "checksum_errors": 0
+              },
+              "device": "sda1",
+              "disk": "sda"
+            },
+            {
+              "type": "DISK",
+              "path": "/dev/sdb1",
+              "guid": "2222222222222222222",
+              "status": "ONLINE",
+              "stats": {
+                "size": 21474836480,
+                "read_errors": 0,
+                "write_errors": 0,
+                "checksum_errors": 0
+              },
+              "device": "sdb1",
+              "disk": "sdb"
+            }
+          ]
+        }
+      ],
+      "log": [],
+      "cache": [],
+      "spare": [],
+      "special": [],
+      "dedup": []
+    },
+    "scan": {
+      "function": "SCRUB",
+      "state": "FINISHED",
+      "start_time": {
+        "$date": "2025-10-14T00:00:00.000Z"
+      },
+      "end_time": {
+        "$date": "2025-10-14T02:30:00.000Z"
+      },
+      "percentage": 100.0,
+      "bytes_to_process": 5368709120,
+      "bytes_processed": 5368709120,
+      "bytes_issued": 5368709120,
+      "pause": null,
+      "errors": 0,
+      "total_secs_left": null
+    },
+    "is_decrypted": true,
+    "encrypt": 0,
+    "encryptkey": "",
+    "encryptkey_path": null
+  },
+  {
+    "id": 2,
+    "name": "backup",
+    "guid": "98765432109876543210",
+    "path": "/mnt/backup",
+    "status": "ONLINE",
+    "healthy": true,
+    "warning": false,
+    "status_code": "FEAT_DISABLED",
+    "status_detail": null,
+    "size": 4294967296,
+    "allocated": 1073741824,
+    "free": 3221225472,
+    "freeing": 0,
+    "fragmentation": "2%",
+    "autotrim": {
+      "parsed": false,
+      "rawvalue": "off",
+      "value": "off",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "topology": {
+      "data": [
+        {
+          "type": "DISK",
+          "path": "/dev/sdc1",
+          "guid": "3333333333333333333",
+          "status": "ONLINE",
+          "stats": {
+            "size": 4294967296,
+            "allocated": 1073741824,
+            "free": 3221225472,
+            "fragmentation": 2,
+            "read_errors": 0,
+            "write_errors": 0,
+            "checksum_errors": 0
+          },
+          "device": "sdc1",
+          "disk": "sdc"
+        }
+      ],
+      "log": [],
+      "cache": [],
+      "spare": [],
+      "special": [],
+      "dedup": []
+    },
+    "scan": null,
+    "is_decrypted": true,
+    "encrypt": 0,
+    "encryptkey": "",
+    "encryptkey_path": null
+  }
+]

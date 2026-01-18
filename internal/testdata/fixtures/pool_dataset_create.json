@@ -1,0 +1,55 @@
+{
+  "id": "tank/data/new-dataset",
+  "type": "FILESYSTEM",
+  "name": "new-dataset",
+  "pool": "tank",
+  "encrypted": false,
+  "encryption_root": null,
+  "key_loaded": null,
+  "locked": false,
+  "mountpoint": "/mnt/tank/data/new-dataset",
+  "children": [],
+  "user_properties": {},
+  "compression": {
+    "parsed": "LZ4",
+    "rawvalue": "lz4",
+    "value": "LZ4",
+    "source": "LOCAL",
+    "source_info": null
+  },
+  "quota": {
+    "parsed": 0,
+    "rawvalue": "0",
+    "value": "0",
+    "source": "DEFAULT",
+    "source_info": null
+  },
+  "refquota": {
+    "parsed": 0,
+    "rawvalue": "0",
+    "value": "0",
+    "source": "DEFAULT",
+    "source_info": null
+  },
+  "atime": {
+    "parsed": true,
+    "rawvalue": "on",
+    "value": "ON",
+    "source": "DEFAULT",
+    "source_info": null
+  },
+  "used": {
+    "parsed": 98304,
+    "rawvalue": "98304",
+    "value": "96K",
+    "source": null,
+    "source_info": null
+  },
+  "available": {
+    "parsed": 10737418240,
+    "rawvalue": "10737418240",
+    "value": "10G",
+    "source": null,
+    "source_info": null
+  }
+}

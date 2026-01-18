@@ -1,0 +1,289 @@
+[
+  {
+    "id": "tank/data",
+    "type": "FILESYSTEM",
+    "name": "data",
+    "pool": "tank",
+    "encrypted": false,
+    "encryption_root": null,
+    "key_loaded": null,
+    "locked": false,
+    "mountpoint": "/mnt/tank/data",
+    "children": [],
+    "user_properties": {},
+    "comments": {
+      "parsed": "",
+      "rawvalue": "",
+      "value": "",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "quota": {
+      "parsed": 0,
+      "rawvalue": "0",
+      "value": "0",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "quota_warning": {
+      "parsed": 80,
+      "rawvalue": "80",
+      "value": "80",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "quota_critical": {
+      "parsed": 95,
+      "rawvalue": "95",
+      "value": "95",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "refquota": {
+      "parsed": 0,
+      "rawvalue": "0",
+      "value": "0",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "refquota_warning": {
+      "parsed": 80,
+      "rawvalue": "80",
+      "value": "80",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "refquota_critical": {
+      "parsed": 95,
+      "rawvalue": "95",
+      "value": "95",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "reservation": {
+      "parsed": 0,
+      "rawvalue": "0",
+      "value": "0",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "refreservation": {
+      "parsed": 0,
+      "rawvalue": "0",
+      "value": "0",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "copies": {
+      "parsed": 1,
+      "rawvalue": "1",
+      "value": "1",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "snapdir": {
+      "parsed": "HIDDEN",
+      "rawvalue": "hidden",
+      "value": "HIDDEN",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "readonly": {
+      "parsed": false,
+      "rawvalue": "off",
+      "value": "OFF",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "recordsize": {
+      "parsed": 131072,
+      "rawvalue": "131072",
+      "value": "128K",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "sparse": {
+      "parsed": null,
+      "rawvalue": null,
+      "value": null,
+      "source": null,
+      "source_info": null
+    },
+    "volsize": {
+      "parsed": null,
+      "rawvalue": null,
+      "value": null,
+      "source": null,
+      "source_info": null
+    },
+    "volblocksize": {
+      "parsed": null,
+      "rawvalue": null,
+      "value": null,
+      "source": null,
+      "source_info": null
+    },
+    "key_format": {
+      "parsed": null,
+      "rawvalue": null,
+      "value": null,
+      "source": null,
+      "source_info": null
+    },
+    "encryption_algorithm": {
+      "parsed": null,
+      "rawvalue": null,
+      "value": null,
+      "source": null,
+      "source_info": null
+    },
+    "used": {
+      "parsed": 1073741824,
+      "rawvalue": "1073741824",
+      "value": "1G",
+      "source": null,
+      "source_info": null
+    },
+    "usedbychildren": {
+      "parsed": 536870912,
+      "rawvalue": "536870912",
+      "value": "512M",
+      "source": null,
+      "source_info": null
+    },
+    "usedbydataset": {
+      "parsed": 268435456,
+      "rawvalue": "268435456",
+      "value": "256M",
+      "source": null,
+      "source_info": null
+    },
+    "usedbyrefreservation": {
+      "parsed": 0,
+      "rawvalue": "0",
+      "value": "0B",
+      "source": null,
+      "source_info": null
+    },
+    "usedbysnapshots": {
+      "parsed": 268435456,
+      "rawvalue": "268435456",
+      "value": "256M",
+      "source": null,
+      "source_info": null
+    },
+    "available": {
+      "parsed": 10737418240,
+      "rawvalue": "10737418240",
+      "value": "10G",
+      "source": null,
+      "source_info": null
+    },
+    "compression": {
+      "parsed": "LZ4",
+      "rawvalue": "lz4",
+      "value": "LZ4",
+      "source": "LOCAL",
+      "source_info": null
+    },
+    "compressratio": {
+      "parsed": "1.50x",
+      "rawvalue": "1.50",
+      "value": "1.50x",
+      "source": null,
+      "source_info": null
+    },
+    "origin": {
+      "parsed": "",
+      "rawvalue": "",
+      "value": "",
+      "source": null,
+      "source_info": null
+    },
+    "deduplication": {
+      "parsed": "OFF",
+      "rawvalue": "off",
+      "value": "OFF",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "checksum": {
+      "parsed": "ON",
+      "rawvalue": "on",
+      "value": "ON",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "sync": {
+      "parsed": "STANDARD",
+      "rawvalue": "standard",
+      "value": "STANDARD",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "exec": {
+      "parsed": true,
+      "rawvalue": "on",
+      "value": "ON",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "atime": {
+      "parsed": true,
+      "rawvalue": "on",
+      "value": "ON",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "casesensitivity": {
+      "parsed": "SENSITIVE",
+      "rawvalue": "sensitive",
+      "value": "SENSITIVE",
+      "source": "INHERITED",
+      "source_info": "tank"
+    },
+    "aclmode": {
+      "parsed": "DISCARD",
+      "rawvalue": "discard",
+      "value": "DISCARD",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "acltype": {
+      "parsed": "NFSV4",
+      "rawvalue": "nfsv4",
+      "value": "NFSV4",
+      "source": "INHERITED",
+      "source_info": "tank"
+    },
+    "xattr": {
+      "parsed": "SA",
+      "rawvalue": "sa",
+      "value": "SA",
+      "source": "INHERITED",
+      "source_info": "tank"
+    },
+    "special_small_block_size": {
+      "parsed": 0,
+      "rawvalue": "0",
+      "value": "0",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "pbkdf2iters": {
+      "parsed": 0,
+      "rawvalue": "0",
+      "value": "0",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "managedby": {
+      "parsed": "",
+      "rawvalue": "",
+      "value": "",
+      "source": "DEFAULT",
+      "source_info": null
+    },
+    "snapshot_count": 5
+  }
+]
