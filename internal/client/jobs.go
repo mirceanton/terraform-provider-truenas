@@ -92,6 +92,14 @@ func (p *JobPoller) Wait(ctx context.Context, jobID int64, timeout time.Duration
 		case JobStateFailed:
 			err := ParseTrueNASError(job.Error)
 			err.LogsExcerpt = job.LogsExcerpt
+
+			// Fetch app lifecycle log if applicable
+			if err.LogPath != "" {
+				if appErr := p.fetchAppLifecycleLog(ctx, err); appErr != "" {
+					err.AppLifecycleError = appErr
+				}
+			}
+
 			return nil, err
 		case JobStateRunning, JobStateWaiting:
 			// Continue polling
@@ -161,4 +169,26 @@ func ParseJobID(data json.RawMessage) (int64, error) {
 	}
 
 	return jobID, nil
+}
+
+// fetchAppLifecycleLog fetches the app lifecycle log and extracts the error.
+func (p *JobPoller) fetchAppLifecycleLog(ctx context.Context, err *TrueNASError) string {
+	if err.LogPath == "" || err.AppName == "" || err.AppAction == "" {
+		return ""
+	}
+
+	// Use filesystem.file_get_contents to read the log
+	result, callErr := p.client.Call(ctx, "filesystem.file_get_contents", []any{err.LogPath})
+	if callErr != nil {
+		// Silently fail - don't make the error worse
+		return ""
+	}
+
+	// Result is a JSON string
+	var content string
+	if jsonErr := json.Unmarshal(result, &content); jsonErr != nil {
+		return ""
+	}
+
+	return ParseAppLifecycleLog(content, err.AppAction, err.AppName)
 }
