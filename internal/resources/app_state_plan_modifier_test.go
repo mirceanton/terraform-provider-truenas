@@ -111,7 +111,7 @@ func TestComputedStatePlanModifier_Description(t *testing.T) {
 	if description == "" {
 		t.Error("expected non-empty description")
 	}
-	expected := "Preserves state value when desired_state isn't changing."
+	expected := "Predicts state value based on desired_state and drift detection."
 	if description != expected {
 		t.Errorf("expected description %q, got %q", expected, description)
 	}
@@ -125,7 +125,7 @@ func TestComputedStatePlanModifier_MarkdownDescription(t *testing.T) {
 	if description == "" {
 		t.Error("expected non-empty markdown description")
 	}
-	expected := "Preserves `state` value when `desired_state` isn't effectively changing, otherwise marks as unknown."
+	expected := "Predicts `state` value: if drift detected (state != desired_state), plans reconciliation to desired_state; otherwise preserves current state."
 	if description != expected {
 		t.Errorf("expected markdown description %q, got %q", expected, description)
 	}
@@ -225,6 +225,95 @@ func TestComputedStatePlanModifier_PlanModifyString(t *testing.T) {
 				if !resp.PlanValue.IsUnknown() {
 					t.Errorf("expected unknown value, got %q", resp.PlanValue.ValueString())
 				}
+			}
+		})
+	}
+}
+
+func TestComputedStatePlanModifier_DriftReconciliation(t *testing.T) {
+	// Bug: When the actual state differs from desired_state (drift scenario),
+	// the plan modifier should predict state will change to match desired_state
+	// because reconciliation will occur during Apply.
+	//
+	// Scenario: App was externally stopped (state=STOPPED) but desired_state=RUNNING.
+	// The plan modifier should predict state=RUNNING (not preserve STOPPED).
+	tests := []struct {
+		name              string
+		stateValue        types.String // actual state from TrueNAS
+		stateDesiredState string       // desired_state in terraform state
+		planDesiredState  string       // desired_state in plan
+		expectedPlanValue string       // what state should be planned as
+	}{
+		{
+			name:              "state STOPPED but desired RUNNING - should plan RUNNING",
+			stateValue:        types.StringValue("STOPPED"),
+			stateDesiredState: "RUNNING",
+			planDesiredState:  "RUNNING",
+			expectedPlanValue: "RUNNING", // reconciliation will start the app
+		},
+		{
+			name:              "state RUNNING but desired STOPPED - should plan STOPPED",
+			stateValue:        types.StringValue("RUNNING"),
+			stateDesiredState: "STOPPED",
+			planDesiredState:  "STOPPED",
+			expectedPlanValue: "STOPPED", // reconciliation will stop the app
+		},
+		{
+			name:              "state matches desired - should preserve state",
+			stateValue:        types.StringValue("RUNNING"),
+			stateDesiredState: "RUNNING",
+			planDesiredState:  "RUNNING",
+			expectedPlanValue: "RUNNING", // no reconciliation needed
+		},
+		{
+			name:              "CRASHED when desired STOPPED - should preserve CRASHED",
+			stateValue:        types.StringValue("CRASHED"),
+			stateDesiredState: "STOPPED",
+			planDesiredState:  "STOPPED",
+			expectedPlanValue: "CRASHED", // CRASHED is "stopped enough"
+		},
+	}
+
+	schemaType := testAppSchema()
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			modifier := computedStatePlanModifier()
+
+			// Create state
+			stateVal := tftypes.NewValue(schemaType, map[string]tftypes.Value{
+				"desired_state": tftypes.NewValue(tftypes.String, tc.stateDesiredState),
+				"state":         tftypes.NewValue(tftypes.String, tc.stateValue.ValueString()),
+			})
+			state := tfsdk.State{
+				Raw:    stateVal,
+				Schema: testAppSchemaFramework(),
+			}
+
+			// Create plan
+			planVal := tftypes.NewValue(schemaType, map[string]tftypes.Value{
+				"desired_state": tftypes.NewValue(tftypes.String, tc.planDesiredState),
+				"state":         tftypes.NewValue(tftypes.String, nil), // unknown in plan
+			})
+			plan := tfsdk.Plan{
+				Raw:    planVal,
+				Schema: testAppSchemaFramework(),
+			}
+
+			req := planmodifier.StringRequest{
+				StateValue: tc.stateValue,
+				PlanValue:  types.StringUnknown(),
+				State:      state,
+				Plan:       plan,
+			}
+			resp := &planmodifier.StringResponse{
+				PlanValue: types.StringUnknown(),
+			}
+
+			modifier.PlanModifyString(context.Background(), req, resp)
+
+			if resp.PlanValue.ValueString() != tc.expectedPlanValue {
+				t.Errorf("expected plan value %q, got %q", tc.expectedPlanValue, resp.PlanValue.ValueString())
 			}
 		})
 	}
