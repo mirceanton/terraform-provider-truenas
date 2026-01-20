@@ -303,7 +303,7 @@ func TestParseTrueNASError_NoAppLifecyclePattern(t *testing.T) {
 }
 
 func TestParseAppLifecycleLog(t *testing.T) {
-	content, err := os.ReadFile("testdata/fixtures/app_lifecycle.log")
+	content, err := os.ReadFile("../testdata/fixtures/app_lifecycle.log")
 	if err != nil {
 		t.Fatalf("failed to read fixture: %v", err)
 	}

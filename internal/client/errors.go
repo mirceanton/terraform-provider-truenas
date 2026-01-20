@@ -130,3 +130,38 @@ func NewHostKeyError(host string, expected, actual string) *TrueNASError {
 		Suggestion: "Verify the fingerprint: ssh-keyscan <host> 2>/dev/null | ssh-keygen -lf -",
 	}
 }
+
+// ParseAppLifecycleLog extracts the actual Docker error from the app lifecycle log.
+// It searches for the most recent matching entry and extracts the error from the end.
+func ParseAppLifecycleLog(content, action, appName string) string {
+	if content == "" || action == "" || appName == "" {
+		return ""
+	}
+
+	// Build pattern to match log entries for this app/action
+	// Format: Failed '<action>' action for '<app>' app: <content>
+	pattern := fmt.Sprintf(`Failed '%s' action for '%s' app: (.+)`,
+		regexp.QuoteMeta(action), regexp.QuoteMeta(appName))
+	re := regexp.MustCompile(pattern)
+
+	// Find all matches, take the last one (most recent)
+	matches := re.FindAllStringSubmatch(content, -1)
+	if len(matches) == 0 {
+		return ""
+	}
+
+	// Get the captured content from the last match
+	lastMatch := matches[len(matches)-1][1]
+
+	// The content contains literal \n separators from Docker output
+	// The actual error is the last non-empty segment
+	parts := strings.Split(lastMatch, `\n`)
+	for i := len(parts) - 1; i >= 0; i-- {
+		trimmed := strings.TrimSpace(parts[i])
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+
+	return lastMatch
+}
