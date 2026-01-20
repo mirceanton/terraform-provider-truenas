@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -614,5 +615,61 @@ func TestJobPoller_MaxIntervalCapping(t *testing.T) {
 				t.Errorf("interval %d (%v) exceeds max interval significantly", i, intervals[i])
 			}
 		}
+	}
+}
+
+func TestJobPoller_FailureWithAppLifecycleLog(t *testing.T) {
+	// Read the fixture
+	logContent, err := os.ReadFile("../testdata/fixtures/app_lifecycle.log")
+	if err != nil {
+		t.Fatalf("failed to read fixture: %v", err)
+	}
+
+	callCount := 0
+	mock := &MockClient{
+		CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			callCount++
+			if method == "core.get_jobs" {
+				return json.RawMessage(`[{
+					"id": 42,
+					"state": "FAILED",
+					"error": "[EFAULT] Failed 'up' action for 'dns' app. Please check /var/log/app_lifecycle.log for more details"
+				}]`), nil
+			}
+			if method == "filesystem.file_get_contents" {
+				// Return the log file content
+				contentJSON, _ := json.Marshal(string(logContent))
+				return contentJSON, nil
+			}
+			t.Errorf("unexpected method: %s", method)
+			return nil, nil
+		},
+	}
+
+	poller := NewJobPoller(mock, &JobPollerConfig{
+		InitialInterval: 1 * time.Millisecond,
+		MaxInterval:     10 * time.Millisecond,
+		Multiplier:      2.0,
+	})
+
+	_, err = poller.Wait(context.Background(), 42, 5*time.Second)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var tnErr *TrueNASError
+	if !errors.As(err, &tnErr) {
+		t.Fatalf("expected TrueNASError, got %T", err)
+	}
+
+	// Should have extracted the clean error
+	if !strings.Contains(tnErr.AppLifecycleError, "bind: address already in use") {
+		t.Errorf("expected AppLifecycleError to contain 'bind: address already in use', got %q", tnErr.AppLifecycleError)
+	}
+
+	// The Error() output should be clean
+	errStr := err.Error()
+	if strings.Contains(errStr, "Please check") {
+		t.Errorf("expected clean error output, got %q", errStr)
 	}
 }
