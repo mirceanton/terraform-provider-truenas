@@ -372,7 +372,11 @@ func (c *SSHClient) CallAndWait(ctx context.Context, method string, params any) 
 		// Strip ANSI codes for cleaner error messages
 		cleaned := ansiRegex.ReplaceAll(output, nil)
 		if len(cleaned) > 0 {
-			return nil, fmt.Errorf("%w: %s", err, string(cleaned))
+			// Parse into structured error
+			tnErr := ParseTrueNASError(string(cleaned))
+			// Fetch app lifecycle log if applicable
+			EnrichAppLifecycleError(ctx, tnErr, c.Call)
+			return nil, tnErr
 		}
 		return nil, err
 	}
