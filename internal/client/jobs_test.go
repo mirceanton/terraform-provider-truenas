@@ -673,3 +673,49 @@ func TestJobPoller_FailureWithAppLifecycleLog(t *testing.T) {
 		t.Errorf("expected clean error output, got %q", errStr)
 	}
 }
+
+func TestJobPoller_FailureWithAppLifecycleLog_FetchFails(t *testing.T) {
+	// Log fetch fails - should still return original error
+	mock := &MockClient{
+		CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+			if method == "core.get_jobs" {
+				return json.RawMessage(`[{
+					"id": 42,
+					"state": "FAILED",
+					"error": "[EFAULT] Failed 'up' action for 'dns' app. Please check /var/log/app_lifecycle.log for more details"
+				}]`), nil
+			}
+			if method == "filesystem.file_get_contents" {
+				// Simulate failure to read log
+				return nil, errors.New("permission denied")
+			}
+			return nil, nil
+		},
+	}
+
+	poller := NewJobPoller(mock, &JobPollerConfig{
+		InitialInterval: 1 * time.Millisecond,
+		MaxInterval:     10 * time.Millisecond,
+		Multiplier:      2.0,
+	})
+
+	_, err := poller.Wait(context.Background(), 42, 5*time.Second)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	var tnErr *TrueNASError
+	if !errors.As(err, &tnErr) {
+		t.Fatalf("expected TrueNASError, got %T", err)
+	}
+
+	// Should still have the original error info
+	if tnErr.Code != "EFAULT" {
+		t.Errorf("expected code EFAULT, got %s", tnErr.Code)
+	}
+
+	// AppLifecycleError should be empty since fetch failed
+	if tnErr.AppLifecycleError != "" {
+		t.Errorf("expected empty AppLifecycleError when fetch fails, got %q", tnErr.AppLifecycleError)
+	}
+}
