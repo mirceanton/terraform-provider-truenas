@@ -8,12 +8,17 @@ import (
 
 // TrueNASError represents a parsed error from the TrueNAS middleware.
 type TrueNASError struct {
-	Code        string // e.g., "EINVAL", "ENOENT", "EFAULT"
-	Message     string // Raw error from middleware
-	Field       string // Which field caused error (if applicable)
-	JobID       int64  // For job-related errors
-	Suggestion  string // Actionable guidance
-	LogsExcerpt string // Job log excerpt for debugging
+	Code              string // e.g., "EINVAL", "ENOENT", "EFAULT"
+	Message           string // Raw error from middleware
+	Field             string // Which field caused error (if applicable)
+	JobID             int64  // For job-related errors
+	Suggestion        string // Actionable guidance
+	LogsExcerpt       string // Job log excerpt for debugging
+	// App lifecycle log fields
+	AppAction         string // "up", "down", etc. - extracted from error
+	AppName           string // App that failed - extracted from error
+	LogPath           string // Path to log file mentioned in error
+	AppLifecycleError string // Clean error extracted from app_lifecycle.log
 }
 
 func (e *TrueNASError) Error() string {
