@@ -6,6 +6,7 @@ import (
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
 func TestNewCronJobResource(t *testing.T) {
@@ -133,4 +134,83 @@ func TestCronJobResource_Schema(t *testing.T) {
 	if blocks["schedule"] == nil {
 		t.Error("expected 'schedule' block")
 	}
+}
+
+// Test helpers
+
+func getCronJobResourceSchema(t *testing.T) resource.SchemaResponse {
+	t.Helper()
+	r := NewCronJobResource()
+	schemaReq := resource.SchemaRequest{}
+	schemaResp := &resource.SchemaResponse{}
+	r.Schema(context.Background(), schemaReq, schemaResp)
+	if schemaResp.Diagnostics.HasError() {
+		t.Fatalf("failed to get schema: %v", schemaResp.Diagnostics)
+	}
+	return *schemaResp
+}
+
+// cronJobModelParams holds parameters for creating test model values.
+type cronJobModelParams struct {
+	ID          interface{}
+	User        interface{}
+	Command     interface{}
+	Description interface{}
+	Enabled     bool
+	Stdout      bool
+	Stderr      bool
+	Schedule    *scheduleBlockParams
+}
+
+func createCronJobModelValue(p cronJobModelParams) tftypes.Value {
+	// Define type structures
+	scheduleType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"minute": tftypes.String,
+			"hour":   tftypes.String,
+			"dom":    tftypes.String,
+			"month":  tftypes.String,
+			"dow":    tftypes.String,
+		},
+	}
+
+	// Build the values map
+	values := map[string]tftypes.Value{
+		"id":          tftypes.NewValue(tftypes.String, p.ID),
+		"user":        tftypes.NewValue(tftypes.String, p.User),
+		"command":     tftypes.NewValue(tftypes.String, p.Command),
+		"description": tftypes.NewValue(tftypes.String, p.Description),
+		"enabled":     tftypes.NewValue(tftypes.Bool, p.Enabled),
+		"stdout":      tftypes.NewValue(tftypes.Bool, p.Stdout),
+		"stderr":      tftypes.NewValue(tftypes.Bool, p.Stderr),
+	}
+
+	// Handle schedule block
+	if p.Schedule != nil {
+		values["schedule"] = tftypes.NewValue(scheduleType, map[string]tftypes.Value{
+			"minute": tftypes.NewValue(tftypes.String, p.Schedule.Minute),
+			"hour":   tftypes.NewValue(tftypes.String, p.Schedule.Hour),
+			"dom":    tftypes.NewValue(tftypes.String, p.Schedule.Dom),
+			"month":  tftypes.NewValue(tftypes.String, p.Schedule.Month),
+			"dow":    tftypes.NewValue(tftypes.String, p.Schedule.Dow),
+		})
+	} else {
+		values["schedule"] = tftypes.NewValue(scheduleType, nil)
+	}
+
+	// Create object type matching the schema
+	objectType := tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"id":          tftypes.String,
+			"user":        tftypes.String,
+			"command":     tftypes.String,
+			"description": tftypes.String,
+			"enabled":     tftypes.Bool,
+			"stdout":      tftypes.Bool,
+			"stderr":      tftypes.Bool,
+			"schedule":    scheduleType,
+		},
+	}
+
+	return tftypes.NewValue(objectType, values)
 }
