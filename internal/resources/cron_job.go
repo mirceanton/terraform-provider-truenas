@@ -205,7 +205,40 @@ func (r *CronJobResource) Create(ctx context.Context, req resource.CreateRequest
 }
 
 func (r *CronJobResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	// TODO: implement in next task
+	var data CronJobResourceModel
+
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	id, err := strconv.ParseInt(data.ID.ValueString(), 10, 64)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Invalid ID",
+			fmt.Sprintf("Unable to parse ID %q: %s", data.ID.ValueString(), err.Error()),
+		)
+		return
+	}
+
+	job, err := r.queryCronJob(ctx, id)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Read Cron Job",
+			fmt.Sprintf("Unable to query cron job: %s", err.Error()),
+		)
+		return
+	}
+
+	if job == nil {
+		// Cron job was deleted outside Terraform
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	mapCronJobToModel(job, &data)
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *CronJobResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
