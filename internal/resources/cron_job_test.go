@@ -957,3 +957,359 @@ func TestCronJobResource_Delete_APIError(t *testing.T) {
 		t.Fatal("expected error for API error")
 	}
 }
+
+func TestCronJobResource_Create_CustomSchedule(t *testing.T) {
+	var capturedParams any
+
+	r := &CronJobResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "cronjob.create" {
+					capturedParams = params
+					return json.RawMessage(`{"id": 10}`), nil
+				}
+				if method == "cronjob.query" {
+					return json.RawMessage(`[{
+						"id": 10,
+						"user": "admin",
+						"command": "/usr/local/bin/report.sh",
+						"description": "Business Hours Report",
+						"enabled": true,
+						"stdout": true,
+						"stderr": true,
+						"schedule": {"minute": "*/15", "hour": "9-17", "dom": "1,15", "month": "*", "dow": "1-5"}
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getCronJobResourceSchema(t)
+	planValue := createCronJobModelValue(cronJobModelParams{
+		User:        "admin",
+		Command:     "/usr/local/bin/report.sh",
+		Description: "Business Hours Report",
+		Enabled:     true,
+		Stdout:      true,
+		Stderr:      true,
+		Schedule: &scheduleBlockParams{
+			Minute: "*/15",
+			Hour:   "9-17",
+			Dom:    "1,15",
+			Month:  "*",
+			Dow:    "1-5",
+		},
+	})
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify schedule params
+	params, ok := capturedParams.(map[string]any)
+	if !ok {
+		t.Fatalf("expected params to be map[string]any, got %T", capturedParams)
+	}
+
+	schedule, ok := params["schedule"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schedule to be map[string]any, got %T", params["schedule"])
+	}
+
+	if schedule["minute"] != "*/15" {
+		t.Errorf("expected schedule minute '*/15', got %v", schedule["minute"])
+	}
+	if schedule["hour"] != "9-17" {
+		t.Errorf("expected schedule hour '9-17', got %v", schedule["hour"])
+	}
+	if schedule["dom"] != "1,15" {
+		t.Errorf("expected schedule dom '1,15', got %v", schedule["dom"])
+	}
+	if schedule["month"] != "*" {
+		t.Errorf("expected schedule month '*', got %v", schedule["month"])
+	}
+	if schedule["dow"] != "1-5" {
+		t.Errorf("expected schedule dow '1-5', got %v", schedule["dow"])
+	}
+
+	// Verify state was set correctly
+	var resultData CronJobResourceModel
+	resp.State.Get(context.Background(), &resultData)
+	if resultData.ID.ValueString() != "10" {
+		t.Errorf("expected ID '10', got %q", resultData.ID.ValueString())
+	}
+	if resultData.Schedule == nil {
+		t.Fatal("expected schedule block to be set")
+	}
+	if resultData.Schedule.Minute.ValueString() != "*/15" {
+		t.Errorf("expected schedule minute '*/15', got %q", resultData.Schedule.Minute.ValueString())
+	}
+	if resultData.Schedule.Hour.ValueString() != "9-17" {
+		t.Errorf("expected schedule hour '9-17', got %q", resultData.Schedule.Hour.ValueString())
+	}
+	if resultData.Schedule.Dom.ValueString() != "1,15" {
+		t.Errorf("expected schedule dom '1,15', got %q", resultData.Schedule.Dom.ValueString())
+	}
+	if resultData.Schedule.Dow.ValueString() != "1-5" {
+		t.Errorf("expected schedule dow '1-5', got %q", resultData.Schedule.Dow.ValueString())
+	}
+}
+
+func TestCronJobResource_Update_ScheduleOnly(t *testing.T) {
+	var capturedUpdateData map[string]any
+
+	r := &CronJobResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "cronjob.update" {
+					args := params.([]any)
+					capturedUpdateData = args[1].(map[string]any)
+					return json.RawMessage(`{"id": 7}`), nil
+				}
+				if method == "cronjob.query" {
+					return json.RawMessage(`[{
+						"id": 7,
+						"user": "root",
+						"command": "/usr/local/bin/backup.sh",
+						"description": "Daily Backup",
+						"enabled": true,
+						"stdout": true,
+						"stderr": false,
+						"schedule": {"minute": "*/30", "hour": "*/2", "dom": "*", "month": "1-6", "dow": "0,6"}
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getCronJobResourceSchema(t)
+
+	// Current state with original schedule
+	stateValue := createCronJobModelValue(cronJobModelParams{
+		ID:          "7",
+		User:        "root",
+		Command:     "/usr/local/bin/backup.sh",
+		Description: "Daily Backup",
+		Enabled:     true,
+		Stdout:      true,
+		Stderr:      false,
+		Schedule: &scheduleBlockParams{
+			Minute: "0",
+			Hour:   "3",
+			Dom:    "*",
+			Month:  "*",
+			Dow:    "*",
+		},
+	})
+
+	// Updated plan with only schedule changes
+	planValue := createCronJobModelValue(cronJobModelParams{
+		ID:          "7",
+		User:        "root",
+		Command:     "/usr/local/bin/backup.sh",
+		Description: "Daily Backup",
+		Enabled:     true,
+		Stdout:      true,
+		Stderr:      false,
+		Schedule: &scheduleBlockParams{
+			Minute: "*/30",
+			Hour:   "*/2",
+			Dom:    "*",
+			Month:  "1-6",
+			Dow:    "0,6",
+		},
+	})
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify non-schedule params remain unchanged
+	if capturedUpdateData["user"] != "root" {
+		t.Errorf("expected user 'root', got %v", capturedUpdateData["user"])
+	}
+	if capturedUpdateData["command"] != "/usr/local/bin/backup.sh" {
+		t.Errorf("expected command '/usr/local/bin/backup.sh', got %v", capturedUpdateData["command"])
+	}
+	if capturedUpdateData["description"] != "Daily Backup" {
+		t.Errorf("expected description 'Daily Backup', got %v", capturedUpdateData["description"])
+	}
+	if capturedUpdateData["enabled"] != true {
+		t.Errorf("expected enabled true, got %v", capturedUpdateData["enabled"])
+	}
+	if capturedUpdateData["stdout"] != true {
+		t.Errorf("expected stdout true, got %v", capturedUpdateData["stdout"])
+	}
+	if capturedUpdateData["stderr"] != false {
+		t.Errorf("expected stderr false, got %v", capturedUpdateData["stderr"])
+	}
+
+	// Verify schedule params changed
+	schedule, ok := capturedUpdateData["schedule"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schedule to be map[string]any, got %T", capturedUpdateData["schedule"])
+	}
+	if schedule["minute"] != "*/30" {
+		t.Errorf("expected schedule minute '*/30', got %v", schedule["minute"])
+	}
+	if schedule["hour"] != "*/2" {
+		t.Errorf("expected schedule hour '*/2', got %v", schedule["hour"])
+	}
+	if schedule["dom"] != "*" {
+		t.Errorf("expected schedule dom '*', got %v", schedule["dom"])
+	}
+	if schedule["month"] != "1-6" {
+		t.Errorf("expected schedule month '1-6', got %v", schedule["month"])
+	}
+	if schedule["dow"] != "0,6" {
+		t.Errorf("expected schedule dow '0,6', got %v", schedule["dow"])
+	}
+
+	// Verify state was set correctly
+	var resultData CronJobResourceModel
+	resp.State.Get(context.Background(), &resultData)
+	if resultData.Schedule == nil {
+		t.Fatal("expected schedule block to be set")
+	}
+	if resultData.Schedule.Minute.ValueString() != "*/30" {
+		t.Errorf("expected schedule minute '*/30', got %q", resultData.Schedule.Minute.ValueString())
+	}
+	if resultData.Schedule.Hour.ValueString() != "*/2" {
+		t.Errorf("expected schedule hour '*/2', got %q", resultData.Schedule.Hour.ValueString())
+	}
+	if resultData.Schedule.Month.ValueString() != "1-6" {
+		t.Errorf("expected schedule month '1-6', got %q", resultData.Schedule.Month.ValueString())
+	}
+	if resultData.Schedule.Dow.ValueString() != "0,6" {
+		t.Errorf("expected schedule dow '0,6', got %q", resultData.Schedule.Dow.ValueString())
+	}
+}
+
+func TestCronJobResource_Create_DisabledJob(t *testing.T) {
+	var capturedParams any
+
+	r := &CronJobResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "cronjob.create" {
+					capturedParams = params
+					return json.RawMessage(`{"id": 12}`), nil
+				}
+				if method == "cronjob.query" {
+					return json.RawMessage(`[{
+						"id": 12,
+						"user": "root",
+						"command": "/usr/local/bin/maintenance.sh",
+						"description": "Disabled Maintenance Job",
+						"enabled": false,
+						"stdout": false,
+						"stderr": false,
+						"schedule": {"minute": "0", "hour": "0", "dom": "*", "month": "*", "dow": "*"}
+					}]`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getCronJobResourceSchema(t)
+	planValue := createCronJobModelValue(cronJobModelParams{
+		User:        "root",
+		Command:     "/usr/local/bin/maintenance.sh",
+		Description: "Disabled Maintenance Job",
+		Enabled:     false,
+		Stdout:      false,
+		Stderr:      false,
+		Schedule: &scheduleBlockParams{
+			Minute: "0",
+			Hour:   "0",
+			Dom:    "*",
+			Month:  "*",
+			Dow:    "*",
+		},
+	})
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Verify enabled flag is false in params
+	params, ok := capturedParams.(map[string]any)
+	if !ok {
+		t.Fatalf("expected params to be map[string]any, got %T", capturedParams)
+	}
+
+	if params["enabled"] != false {
+		t.Errorf("expected enabled false, got %v", params["enabled"])
+	}
+	if params["stdout"] != false {
+		t.Errorf("expected stdout false, got %v", params["stdout"])
+	}
+	if params["stderr"] != false {
+		t.Errorf("expected stderr false, got %v", params["stderr"])
+	}
+
+	// Verify state was set correctly with enabled=false
+	var resultData CronJobResourceModel
+	resp.State.Get(context.Background(), &resultData)
+	if resultData.ID.ValueString() != "12" {
+		t.Errorf("expected ID '12', got %q", resultData.ID.ValueString())
+	}
+	if resultData.Enabled.ValueBool() != false {
+		t.Errorf("expected enabled false, got %v", resultData.Enabled.ValueBool())
+	}
+	if resultData.Description.ValueString() != "Disabled Maintenance Job" {
+		t.Errorf("expected description 'Disabled Maintenance Job', got %q", resultData.Description.ValueString())
+	}
+}
