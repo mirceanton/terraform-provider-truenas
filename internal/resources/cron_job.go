@@ -148,7 +148,60 @@ func (r *CronJobResource) Configure(ctx context.Context, req resource.ConfigureR
 }
 
 func (r *CronJobResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	// TODO: implement in next task
+	var data CronJobResourceModel
+
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Build params
+	params := buildCronJobParams(&data)
+
+	// Call API
+	result, err := r.client.Call(ctx, "cronjob.create", params)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Create Cron Job",
+			fmt.Sprintf("Unable to create cron job: %s", err.Error()),
+		)
+		return
+	}
+
+	// Parse response to get ID
+	var createResp struct {
+		ID int64 `json:"id"`
+	}
+	if err := json.Unmarshal(result, &createResp); err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Parse Response",
+			fmt.Sprintf("Unable to parse create response: %s", err.Error()),
+		)
+		return
+	}
+
+	// Query to get full state
+	job, err := r.queryCronJob(ctx, createResp.ID)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Read Cron Job",
+			fmt.Sprintf("Cron job created but unable to read: %s", err.Error()),
+		)
+		return
+	}
+
+	if job == nil {
+		resp.Diagnostics.AddError(
+			"Cron Job Not Found",
+			"Cron job was created but could not be found.",
+		)
+		return
+	}
+
+	// Set state from response
+	mapCronJobToModel(job, &data)
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *CronJobResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
