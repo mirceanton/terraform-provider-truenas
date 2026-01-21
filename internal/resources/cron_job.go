@@ -2,8 +2,11 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 
+	"github.com/deevus/terraform-provider-truenas/internal/api"
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -162,4 +165,67 @@ func (r *CronJobResource) Delete(ctx context.Context, req resource.DeleteRequest
 
 func (r *CronJobResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// queryCronJob queries a cron job by ID and returns the response.
+func (r *CronJobResource) queryCronJob(ctx context.Context, id int64) (*api.CronJobResponse, error) {
+	filter := [][]any{{"id", "=", id}}
+	result, err := r.client.Call(ctx, "cronjob.query", filter)
+	if err != nil {
+		return nil, err
+	}
+
+	var jobs []api.CronJobResponse
+	if err := json.Unmarshal(result, &jobs); err != nil {
+		return nil, fmt.Errorf("parse response: %w", err)
+	}
+
+	if len(jobs) == 0 {
+		return nil, nil
+	}
+
+	return &jobs[0], nil
+}
+
+// buildCronJobParams builds the API params from the resource model.
+func buildCronJobParams(data *CronJobResourceModel) map[string]any {
+	params := map[string]any{
+		"user":        data.User.ValueString(),
+		"command":     data.Command.ValueString(),
+		"description": data.Description.ValueString(),
+		"enabled":     data.Enabled.ValueBool(),
+		"stdout":      data.Stdout.ValueBool(),
+		"stderr":      data.Stderr.ValueBool(),
+	}
+
+	if data.Schedule != nil {
+		params["schedule"] = map[string]any{
+			"minute": data.Schedule.Minute.ValueString(),
+			"hour":   data.Schedule.Hour.ValueString(),
+			"dom":    data.Schedule.Dom.ValueString(),
+			"month":  data.Schedule.Month.ValueString(),
+			"dow":    data.Schedule.Dow.ValueString(),
+		}
+	}
+
+	return params
+}
+
+// mapCronJobToModel maps an API response to the resource model.
+func mapCronJobToModel(job *api.CronJobResponse, data *CronJobResourceModel) {
+	data.ID = types.StringValue(strconv.FormatInt(job.ID, 10))
+	data.User = types.StringValue(job.User)
+	data.Command = types.StringValue(job.Command)
+	data.Description = types.StringValue(job.Description)
+	data.Enabled = types.BoolValue(job.Enabled)
+	data.Stdout = types.BoolValue(job.Stdout)
+	data.Stderr = types.BoolValue(job.Stderr)
+
+	if data.Schedule != nil {
+		data.Schedule.Minute = types.StringValue(job.Schedule.Minute)
+		data.Schedule.Hour = types.StringValue(job.Schedule.Hour)
+		data.Schedule.Dom = types.StringValue(job.Schedule.Dom)
+		data.Schedule.Month = types.StringValue(job.Schedule.Month)
+		data.Schedule.Dow = types.StringValue(job.Schedule.Dow)
+	}
 }
