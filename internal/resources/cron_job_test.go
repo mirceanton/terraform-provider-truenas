@@ -125,11 +125,11 @@ func TestCronJobResource_Schema(t *testing.T) {
 	if attrs["enabled"] == nil {
 		t.Error("expected 'enabled' attribute")
 	}
-	if attrs["stdout"] == nil {
-		t.Error("expected 'stdout' attribute")
+	if attrs["capture_stdout"] == nil {
+		t.Error("expected 'capture_stdout' attribute")
 	}
-	if attrs["stderr"] == nil {
-		t.Error("expected 'stderr' attribute")
+	if attrs["capture_stderr"] == nil {
+		t.Error("expected 'capture_stderr' attribute")
 	}
 
 	// Verify blocks exist
@@ -155,14 +155,14 @@ func getCronJobResourceSchema(t *testing.T) resource.SchemaResponse {
 
 // cronJobModelParams holds parameters for creating test model values.
 type cronJobModelParams struct {
-	ID          interface{}
-	User        interface{}
-	Command     interface{}
-	Description interface{}
-	Enabled     bool
-	Stdout      bool
-	Stderr      bool
-	Schedule    *scheduleBlockParams
+	ID            interface{}
+	User          interface{}
+	Command       interface{}
+	Description   interface{}
+	Enabled       bool
+	CaptureStdout bool
+	CaptureStderr bool
+	Schedule      *scheduleBlockParams
 }
 
 func createCronJobModelValue(p cronJobModelParams) tftypes.Value {
@@ -179,13 +179,13 @@ func createCronJobModelValue(p cronJobModelParams) tftypes.Value {
 
 	// Build the values map
 	values := map[string]tftypes.Value{
-		"id":          tftypes.NewValue(tftypes.String, p.ID),
-		"user":        tftypes.NewValue(tftypes.String, p.User),
-		"command":     tftypes.NewValue(tftypes.String, p.Command),
-		"description": tftypes.NewValue(tftypes.String, p.Description),
-		"enabled":     tftypes.NewValue(tftypes.Bool, p.Enabled),
-		"stdout":      tftypes.NewValue(tftypes.Bool, p.Stdout),
-		"stderr":      tftypes.NewValue(tftypes.Bool, p.Stderr),
+		"id":             tftypes.NewValue(tftypes.String, p.ID),
+		"user":           tftypes.NewValue(tftypes.String, p.User),
+		"command":        tftypes.NewValue(tftypes.String, p.Command),
+		"description":    tftypes.NewValue(tftypes.String, p.Description),
+		"enabled":        tftypes.NewValue(tftypes.Bool, p.Enabled),
+		"capture_stdout": tftypes.NewValue(tftypes.Bool, p.CaptureStdout),
+		"capture_stderr": tftypes.NewValue(tftypes.Bool, p.CaptureStderr),
 	}
 
 	// Handle schedule block
@@ -204,14 +204,14 @@ func createCronJobModelValue(p cronJobModelParams) tftypes.Value {
 	// Create object type matching the schema
 	objectType := tftypes.Object{
 		AttributeTypes: map[string]tftypes.Type{
-			"id":          tftypes.String,
-			"user":        tftypes.String,
-			"command":     tftypes.String,
-			"description": tftypes.String,
-			"enabled":     tftypes.Bool,
-			"stdout":      tftypes.Bool,
-			"stderr":      tftypes.Bool,
-			"schedule":    scheduleType,
+			"id":             tftypes.String,
+			"user":           tftypes.String,
+			"command":        tftypes.String,
+			"description":    tftypes.String,
+			"enabled":        tftypes.Bool,
+			"capture_stdout": tftypes.Bool,
+			"capture_stderr": tftypes.Bool,
+			"schedule":       scheduleType,
 		},
 	}
 
@@ -249,12 +249,12 @@ func TestCronJobResource_Create_Success(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	planValue := createCronJobModelValue(cronJobModelParams{
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -287,7 +287,7 @@ func TestCronJobResource_Create_Success(t *testing.T) {
 		t.Errorf("expected method 'cronjob.create', got %q", capturedMethod)
 	}
 
-	// Verify params
+	// Verify params - API receives inverted values
 	params, ok := capturedParams.(map[string]any)
 	if !ok {
 		t.Fatalf("expected params to be map[string]any, got %T", capturedParams)
@@ -305,11 +305,13 @@ func TestCronJobResource_Create_Success(t *testing.T) {
 	if params["enabled"] != true {
 		t.Errorf("expected enabled true, got %v", params["enabled"])
 	}
+	// capture_stdout=false means stdout=true (inverted)
 	if params["stdout"] != true {
-		t.Errorf("expected stdout true, got %v", params["stdout"])
+		t.Errorf("expected stdout true (inverted from capture_stdout=false), got %v", params["stdout"])
 	}
+	// capture_stderr=true means stderr=false (inverted)
 	if params["stderr"] != false {
-		t.Errorf("expected stderr false, got %v", params["stderr"])
+		t.Errorf("expected stderr false (inverted from capture_stderr=true), got %v", params["stderr"])
 	}
 
 	// Verify schedule
@@ -351,11 +353,13 @@ func TestCronJobResource_Create_Success(t *testing.T) {
 	if resultData.Enabled.ValueBool() != true {
 		t.Errorf("expected enabled true, got %v", resultData.Enabled.ValueBool())
 	}
-	if resultData.Stdout.ValueBool() != true {
-		t.Errorf("expected stdout true, got %v", resultData.Stdout.ValueBool())
+	// API returns stdout=true, which maps to capture_stdout=false (inverted)
+	if resultData.CaptureStdout.ValueBool() != false {
+		t.Errorf("expected capture_stdout false (inverted from API stdout=true), got %v", resultData.CaptureStdout.ValueBool())
 	}
-	if resultData.Stderr.ValueBool() != false {
-		t.Errorf("expected stderr false, got %v", resultData.Stderr.ValueBool())
+	// API returns stderr=false, which maps to capture_stderr=true (inverted)
+	if resultData.CaptureStderr.ValueBool() != true {
+		t.Errorf("expected capture_stderr true (inverted from API stderr=false), got %v", resultData.CaptureStderr.ValueBool())
 	}
 }
 
@@ -370,12 +374,12 @@ func TestCronJobResource_Create_APIError(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	planValue := createCronJobModelValue(cronJobModelParams{
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -430,13 +434,13 @@ func TestCronJobResource_Read_Success(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	stateValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "5",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -483,11 +487,13 @@ func TestCronJobResource_Read_Success(t *testing.T) {
 	if resultData.Enabled.ValueBool() != true {
 		t.Errorf("expected enabled true, got %v", resultData.Enabled.ValueBool())
 	}
-	if resultData.Stdout.ValueBool() != true {
-		t.Errorf("expected stdout true, got %v", resultData.Stdout.ValueBool())
+	// API returns stdout=true, which maps to capture_stdout=false (inverted)
+	if resultData.CaptureStdout.ValueBool() != false {
+		t.Errorf("expected capture_stdout false (inverted from API stdout=true), got %v", resultData.CaptureStdout.ValueBool())
 	}
-	if resultData.Stderr.ValueBool() != false {
-		t.Errorf("expected stderr false, got %v", resultData.Stderr.ValueBool())
+	// API returns stderr=false, which maps to capture_stderr=true (inverted)
+	if resultData.CaptureStderr.ValueBool() != true {
+		t.Errorf("expected capture_stderr true (inverted from API stderr=false), got %v", resultData.CaptureStderr.ValueBool())
 	}
 	if resultData.Schedule == nil {
 		t.Fatal("expected schedule block to be set")
@@ -520,13 +526,13 @@ func TestCronJobResource_Read_NotFound(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	stateValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Deleted Job",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "5",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Deleted Job",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -572,13 +578,13 @@ func TestCronJobResource_Read_APIError(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	stateValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "5",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -644,13 +650,13 @@ func TestCronJobResource_Update_Success(t *testing.T) {
 
 	// Current state
 	stateValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "5",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -662,13 +668,13 @@ func TestCronJobResource_Update_Success(t *testing.T) {
 
 	// Updated plan
 	planValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "admin",
-		Command:     "/usr/local/bin/updated-backup.sh",
-		Description: "Updated Daily Backup",
-		Enabled:     false,
-		Stdout:      false,
-		Stderr:      true,
+		ID:            "5",
+		User:          "admin",
+		Command:       "/usr/local/bin/updated-backup.sh",
+		Description:   "Updated Daily Backup",
+		Enabled:       false,
+		CaptureStdout: true,
+		CaptureStderr: false,
 		Schedule: &scheduleBlockParams{
 			Minute: "30",
 			Hour:   "4",
@@ -709,7 +715,7 @@ func TestCronJobResource_Update_Success(t *testing.T) {
 		t.Errorf("expected ID 5, got %d", capturedID)
 	}
 
-	// Verify update params
+	// Verify update params - API receives inverted values
 	if capturedUpdateData["user"] != "admin" {
 		t.Errorf("expected user 'admin', got %v", capturedUpdateData["user"])
 	}
@@ -722,11 +728,13 @@ func TestCronJobResource_Update_Success(t *testing.T) {
 	if capturedUpdateData["enabled"] != false {
 		t.Errorf("expected enabled false, got %v", capturedUpdateData["enabled"])
 	}
+	// capture_stdout=true means stdout=false (inverted)
 	if capturedUpdateData["stdout"] != false {
-		t.Errorf("expected stdout false, got %v", capturedUpdateData["stdout"])
+		t.Errorf("expected stdout false (inverted from capture_stdout=true), got %v", capturedUpdateData["stdout"])
 	}
+	// capture_stderr=false means stderr=true (inverted)
 	if capturedUpdateData["stderr"] != true {
-		t.Errorf("expected stderr true, got %v", capturedUpdateData["stderr"])
+		t.Errorf("expected stderr true (inverted from capture_stderr=false), got %v", capturedUpdateData["stderr"])
 	}
 
 	// Verify schedule in update params
@@ -765,11 +773,13 @@ func TestCronJobResource_Update_Success(t *testing.T) {
 	if resultData.Enabled.ValueBool() != false {
 		t.Errorf("expected enabled false, got %v", resultData.Enabled.ValueBool())
 	}
-	if resultData.Stdout.ValueBool() != false {
-		t.Errorf("expected stdout false, got %v", resultData.Stdout.ValueBool())
+	// API returns stdout=false, which maps to capture_stdout=true (inverted)
+	if resultData.CaptureStdout.ValueBool() != true {
+		t.Errorf("expected capture_stdout true (inverted from API stdout=false), got %v", resultData.CaptureStdout.ValueBool())
 	}
-	if resultData.Stderr.ValueBool() != true {
-		t.Errorf("expected stderr true, got %v", resultData.Stderr.ValueBool())
+	// API returns stderr=true, which maps to capture_stderr=false (inverted)
+	if resultData.CaptureStderr.ValueBool() != false {
+		t.Errorf("expected capture_stderr false (inverted from API stderr=true), got %v", resultData.CaptureStderr.ValueBool())
 	}
 	if resultData.Schedule == nil {
 		t.Fatal("expected schedule block to be set")
@@ -801,13 +811,13 @@ func TestCronJobResource_Update_APIError(t *testing.T) {
 
 	// Current state
 	stateValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "5",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -819,13 +829,13 @@ func TestCronJobResource_Update_APIError(t *testing.T) {
 
 	// Updated plan
 	planValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "admin",
-		Command:     "/usr/local/bin/updated-backup.sh",
-		Description: "Updated Daily Backup",
-		Enabled:     false,
-		Stdout:      false,
-		Stderr:      true,
+		ID:            "5",
+		User:          "admin",
+		Command:       "/usr/local/bin/updated-backup.sh",
+		Description:   "Updated Daily Backup",
+		Enabled:       false,
+		CaptureStdout: true,
+		CaptureStderr: false,
 		Schedule: &scheduleBlockParams{
 			Minute: "30",
 			Hour:   "4",
@@ -875,13 +885,13 @@ func TestCronJobResource_Delete_Success(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	stateValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "5",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -926,13 +936,13 @@ func TestCronJobResource_Delete_APIError(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	stateValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "5",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "5",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -987,12 +997,12 @@ func TestCronJobResource_Create_CustomSchedule(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	planValue := createCronJobModelValue(cronJobModelParams{
-		User:        "admin",
-		Command:     "/usr/local/bin/report.sh",
-		Description: "Business Hours Report",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      true,
+		User:          "admin",
+		Command:       "/usr/local/bin/report.sh",
+		Description:   "Business Hours Report",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: false,
 		Schedule: &scheduleBlockParams{
 			Minute: "*/15",
 			Hour:   "9-17",
@@ -1103,13 +1113,13 @@ func TestCronJobResource_Update_ScheduleOnly(t *testing.T) {
 
 	// Current state with original schedule
 	stateValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "7",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "7",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "3",
@@ -1121,13 +1131,13 @@ func TestCronJobResource_Update_ScheduleOnly(t *testing.T) {
 
 	// Updated plan with only schedule changes
 	planValue := createCronJobModelValue(cronJobModelParams{
-		ID:          "7",
-		User:        "root",
-		Command:     "/usr/local/bin/backup.sh",
-		Description: "Daily Backup",
-		Enabled:     true,
-		Stdout:      true,
-		Stderr:      false,
+		ID:            "7",
+		User:          "root",
+		Command:       "/usr/local/bin/backup.sh",
+		Description:   "Daily Backup",
+		Enabled:       true,
+		CaptureStdout: false,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "*/30",
 			Hour:   "*/2",
@@ -1160,7 +1170,7 @@ func TestCronJobResource_Update_ScheduleOnly(t *testing.T) {
 		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
 	}
 
-	// Verify non-schedule params remain unchanged
+	// Verify non-schedule params remain unchanged - API receives inverted values
 	if capturedUpdateData["user"] != "root" {
 		t.Errorf("expected user 'root', got %v", capturedUpdateData["user"])
 	}
@@ -1173,11 +1183,13 @@ func TestCronJobResource_Update_ScheduleOnly(t *testing.T) {
 	if capturedUpdateData["enabled"] != true {
 		t.Errorf("expected enabled true, got %v", capturedUpdateData["enabled"])
 	}
+	// capture_stdout=false means stdout=true (inverted)
 	if capturedUpdateData["stdout"] != true {
-		t.Errorf("expected stdout true, got %v", capturedUpdateData["stdout"])
+		t.Errorf("expected stdout true (inverted from capture_stdout=false), got %v", capturedUpdateData["stdout"])
 	}
+	// capture_stderr=true means stderr=false (inverted)
 	if capturedUpdateData["stderr"] != false {
-		t.Errorf("expected stderr false, got %v", capturedUpdateData["stderr"])
+		t.Errorf("expected stderr false (inverted from capture_stderr=true), got %v", capturedUpdateData["stderr"])
 	}
 
 	// Verify schedule params changed
@@ -1250,12 +1262,12 @@ func TestCronJobResource_Create_DisabledJob(t *testing.T) {
 
 	schemaResp := getCronJobResourceSchema(t)
 	planValue := createCronJobModelValue(cronJobModelParams{
-		User:        "root",
-		Command:     "/usr/local/bin/maintenance.sh",
-		Description: "Disabled Maintenance Job",
-		Enabled:     false,
-		Stdout:      false,
-		Stderr:      false,
+		User:          "root",
+		Command:       "/usr/local/bin/maintenance.sh",
+		Description:   "Disabled Maintenance Job",
+		Enabled:       false,
+		CaptureStdout: true,
+		CaptureStderr: true,
 		Schedule: &scheduleBlockParams{
 			Minute: "0",
 			Hour:   "0",
@@ -1284,7 +1296,7 @@ func TestCronJobResource_Create_DisabledJob(t *testing.T) {
 		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
 	}
 
-	// Verify enabled flag is false in params
+	// Verify enabled flag is false in params - API receives inverted values
 	params, ok := capturedParams.(map[string]any)
 	if !ok {
 		t.Fatalf("expected params to be map[string]any, got %T", capturedParams)
@@ -1293,11 +1305,13 @@ func TestCronJobResource_Create_DisabledJob(t *testing.T) {
 	if params["enabled"] != false {
 		t.Errorf("expected enabled false, got %v", params["enabled"])
 	}
+	// capture_stdout=true means stdout=false (inverted)
 	if params["stdout"] != false {
-		t.Errorf("expected stdout false, got %v", params["stdout"])
+		t.Errorf("expected stdout false (inverted from capture_stdout=true), got %v", params["stdout"])
 	}
+	// capture_stderr=true means stderr=false (inverted)
 	if params["stderr"] != false {
-		t.Errorf("expected stderr false, got %v", params["stderr"])
+		t.Errorf("expected stderr false (inverted from capture_stderr=true), got %v", params["stderr"])
 	}
 
 	// Verify state was set correctly with enabled=false

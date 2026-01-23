@@ -26,14 +26,14 @@ var (
 
 // CronJobResourceModel describes the resource data model.
 type CronJobResourceModel struct {
-	ID          types.String   `tfsdk:"id"`
-	User        types.String   `tfsdk:"user"`
-	Command     types.String   `tfsdk:"command"`
-	Description types.String   `tfsdk:"description"`
-	Enabled     types.Bool     `tfsdk:"enabled"`
-	Stdout      types.Bool     `tfsdk:"stdout"`
-	Stderr      types.Bool     `tfsdk:"stderr"`
-	Schedule    *ScheduleBlock `tfsdk:"schedule"`
+	ID            types.String   `tfsdk:"id"`
+	User          types.String   `tfsdk:"user"`
+	Command       types.String   `tfsdk:"command"`
+	Description   types.String   `tfsdk:"description"`
+	Enabled       types.Bool     `tfsdk:"enabled"`
+	CaptureStdout types.Bool     `tfsdk:"capture_stdout"`
+	CaptureStderr types.Bool     `tfsdk:"capture_stderr"`
+	Schedule      *ScheduleBlock `tfsdk:"schedule"`
 }
 
 // CronJobResource defines the resource implementation.
@@ -81,17 +81,17 @@ func (r *CronJobResource) Schema(ctx context.Context, req resource.SchemaRequest
 				Computed:    true,
 				Default:     booldefault.StaticBool(true),
 			},
-			"stdout": schema.BoolAttribute{
-				Description: "Redirect stdout to syslog.",
+			"capture_stdout": schema.BoolAttribute{
+				Description: "Capture standard output and mail to user account.",
 				Optional:    true,
 				Computed:    true,
-				Default:     booldefault.StaticBool(true),
+				Default:     booldefault.StaticBool(false),
 			},
-			"stderr": schema.BoolAttribute{
-				Description: "Redirect stderr to syslog.",
+			"capture_stderr": schema.BoolAttribute{
+				Description: "Capture error output and mail to user account.",
 				Optional:    true,
 				Computed:    true,
-				Default:     booldefault.StaticBool(true),
+				Default:     booldefault.StaticBool(false),
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -356,8 +356,8 @@ func buildCronJobParams(data *CronJobResourceModel) map[string]any {
 		"command":     data.Command.ValueString(),
 		"description": data.Description.ValueString(),
 		"enabled":     data.Enabled.ValueBool(),
-		"stdout":      data.Stdout.ValueBool(),
-		"stderr":      data.Stderr.ValueBool(),
+		"stdout":      !data.CaptureStdout.ValueBool(),
+		"stderr":      !data.CaptureStderr.ValueBool(),
 	}
 
 	if data.Schedule != nil {
@@ -380,8 +380,8 @@ func mapCronJobToModel(job *api.CronJobResponse, data *CronJobResourceModel) {
 	data.Command = types.StringValue(job.Command)
 	data.Description = types.StringValue(job.Description)
 	data.Enabled = types.BoolValue(job.Enabled)
-	data.Stdout = types.BoolValue(job.Stdout)
-	data.Stderr = types.BoolValue(job.Stderr)
+	data.CaptureStdout = types.BoolValue(!job.Stdout)
+	data.CaptureStderr = types.BoolValue(!job.Stderr)
 
 	if data.Schedule != nil {
 		data.Schedule.Minute = types.StringValue(job.Schedule.Minute)

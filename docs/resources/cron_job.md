@@ -27,8 +27,8 @@ resource "truenas_cron_job" "weekly_maintenance" {
   command     = "/usr/local/bin/maintenance.sh --verbose"
   description = "Weekly system maintenance"
   enabled     = true
-  stdout      = false
-  stderr      = false
+  capture_stdout = true
+  capture_stderr = true
 
   schedule {
     minute = "30"
@@ -47,8 +47,6 @@ resource "truenas_cron_job" "health_check" {
   user        = "root"
   command     = "/mnt/tank/scripts/health-check.sh | logger -t health-check"
   description = "Hourly health check"
-  stdout      = true
-  stderr      = true
 
   schedule {
     minute = "0"
@@ -63,8 +61,8 @@ resource "truenas_cron_job" "health_check" {
 * `command` - (Required) Command to execute.
 * `description` - (Optional) Job description. Default: "".
 * `enabled` - (Optional) Enable the cron job. Default: true.
-* `stdout` - (Optional) Redirect stdout to syslog. Default: true.
-* `stderr` - (Optional) Redirect stderr to syslog. Default: true.
+* `capture_stdout` - (Optional) Capture standard output and mail to user account. Default: false.
+* `capture_stderr` - (Optional) Capture error output and mail to user account. Default: false.
 * `schedule` - (Required) Schedule block. See Schedule below.
 
 ### schedule Block
