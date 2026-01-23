@@ -18,8 +18,8 @@ func TestNewSnapshotsDataSource(t *testing.T) {
 		t.Fatal("expected non-nil data source")
 	}
 
-	var _ datasource.DataSource = ds
-	var _ datasource.DataSourceWithConfigure = ds.(*SnapshotsDataSource)
+	_ = datasource.DataSource(ds)
+	_ = datasource.DataSourceWithConfigure(ds.(*SnapshotsDataSource))
 }
 
 func TestSnapshotsDataSource_Metadata(t *testing.T) {

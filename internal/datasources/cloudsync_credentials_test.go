@@ -19,7 +19,7 @@ func TestNewCloudSyncCredentialsDataSource(t *testing.T) {
 	}
 
 	// Verify it implements the required interfaces
-	var _ datasource.DataSource = ds
+	_ = datasource.DataSource(ds)
 	var _ datasource.DataSourceWithConfigure = ds.(*CloudSyncCredentialsDataSource)
 }
 
@@ -542,6 +542,6 @@ func TestCloudSyncCredentialsDataSource_Read_UnknownProvider(t *testing.T) {
 func TestCloudSyncCredentialsDataSource_ImplementsInterfaces(t *testing.T) {
 	ds := NewCloudSyncCredentialsDataSource()
 
-	var _ datasource.DataSource = ds
-	var _ datasource.DataSourceWithConfigure = ds.(*CloudSyncCredentialsDataSource)
+	_ = datasource.DataSource(ds)
+	_ = datasource.DataSourceWithConfigure(ds.(*CloudSyncCredentialsDataSource))
 }

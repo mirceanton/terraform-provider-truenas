@@ -21,8 +21,8 @@ func TestNewHostPathResource(t *testing.T) {
 	}
 
 	// Verify it implements the required interfaces
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*HostPathResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*HostPathResource))
 }
 
 func TestHostPathResource_Metadata(t *testing.T) {
@@ -723,8 +723,8 @@ func TestHostPathResource_Delete_APIError(t *testing.T) {
 func TestHostPathResource_ImplementsInterfaces(t *testing.T) {
 	r := NewHostPathResource()
 
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*HostPathResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*HostPathResource))
 }
 
 // Test Create with plan parsing error
@@ -1317,9 +1317,10 @@ func TestHostPathResource_Delete_ForceDestroy(t *testing.T) {
 					p, _ := params.(map[string]any)
 					setpermCalls = append(setpermCalls, p)
 					path := p["path"].(string)
-					if path == "/mnt/tank/apps/myapp" {
+					switch path {
+					case "/mnt/tank/apps/myapp":
 						callOrder = append(callOrder, "setperm-target")
-					} else if path == "/mnt/tank/apps" {
+					case "/mnt/tank/apps":
 						// Check if this is restore (has original values) or initial set (has 777)
 						if p["mode"] == "755" {
 							callOrder = append(callOrder, "setperm-parent-restore")

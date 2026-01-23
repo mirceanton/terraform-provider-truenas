@@ -24,9 +24,9 @@ func TestNewCronJobResource(t *testing.T) {
 	}
 
 	// Verify interface implementations
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*CronJobResource)
-	var _ resource.ResourceWithImportState = r.(*CronJobResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*CronJobResource))
+	_ = resource.ResourceWithImportState(r.(*CronJobResource))
 }
 
 func TestCronJobResource_Metadata(t *testing.T) {

@@ -25,9 +25,9 @@ func TestNewCloudSyncTaskResource(t *testing.T) {
 	}
 
 	// Verify interface implementations
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*CloudSyncTaskResource)
-	var _ resource.ResourceWithImportState = r.(*CloudSyncTaskResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*CloudSyncTaskResource))
+	_ = resource.ResourceWithImportState(r.(*CloudSyncTaskResource))
 }
 
 func TestCloudSyncTaskResource_Metadata(t *testing.T) {

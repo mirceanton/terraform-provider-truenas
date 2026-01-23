@@ -19,8 +19,8 @@ func TestNewPoolDataSource(t *testing.T) {
 	}
 
 	// Verify it implements the required interfaces
-	var _ datasource.DataSource = ds
-	var _ datasource.DataSourceWithConfigure = ds.(*PoolDataSource)
+	_ = datasource.DataSource(ds)
+	_ = datasource.DataSourceWithConfigure(ds.(*PoolDataSource))
 }
 
 func TestPoolDataSource_Metadata(t *testing.T) {
@@ -462,6 +462,6 @@ func TestPoolDataSource_Read_VerifyFilterParams(t *testing.T) {
 func TestPoolDataSource_ImplementsInterfaces(t *testing.T) {
 	ds := NewPoolDataSource()
 
-	var _ datasource.DataSource = ds
-	var _ datasource.DataSourceWithConfigure = ds.(*PoolDataSource)
+	_ = datasource.DataSource(ds)
+	_ = datasource.DataSourceWithConfigure(ds.(*PoolDataSource))
 }

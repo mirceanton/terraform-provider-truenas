@@ -18,7 +18,7 @@ func TestNewCloudSyncCredentialsResource(t *testing.T) {
 		t.Fatal("expected non-nil resource")
 	}
 
-	var _ resource.Resource = r
+	_ = resource.Resource(r)
 	var _ resource.ResourceWithConfigure = r.(*CloudSyncCredentialsResource)
 	var _ resource.ResourceWithImportState = r.(*CloudSyncCredentialsResource)
 }

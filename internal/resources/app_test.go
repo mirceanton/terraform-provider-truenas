@@ -23,7 +23,7 @@ func TestNewAppResource(t *testing.T) {
 	}
 
 	// Verify it implements the required interfaces
-	var _ resource.Resource = r
+	_ = resource.Resource(r)
 	var _ resource.ResourceWithConfigure = r.(*AppResource)
 	var _ resource.ResourceWithImportState = r.(*AppResource)
 }
@@ -788,9 +788,9 @@ func TestAppResource_ImportState(t *testing.T) {
 func TestAppResource_ImplementsInterfaces(t *testing.T) {
 	r := NewAppResource()
 
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*AppResource)
-	var _ resource.ResourceWithImportState = r.(*AppResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*AppResource))
+	_ = resource.ResourceWithImportState(r.(*AppResource))
 }
 
 // Test Read with invalid JSON response

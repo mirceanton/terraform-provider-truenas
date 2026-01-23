@@ -19,7 +19,7 @@ func TestNewDatasetDataSource(t *testing.T) {
 	}
 
 	// Verify it implements the required interfaces
-	var _ datasource.DataSource = ds
+	_ = datasource.DataSource(ds)
 	var _ datasource.DataSourceWithConfigure = ds.(*DatasetDataSource)
 }
 
@@ -531,6 +531,6 @@ func TestDatasetDataSource_Read_NestedPath(t *testing.T) {
 func TestDatasetDataSource_ImplementsInterfaces(t *testing.T) {
 	ds := NewDatasetDataSource()
 
-	var _ datasource.DataSource = ds
-	var _ datasource.DataSourceWithConfigure = ds.(*DatasetDataSource)
+	_ = datasource.DataSource(ds)
+	_ = datasource.DataSourceWithConfigure(ds.(*DatasetDataSource))
 }

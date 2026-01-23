@@ -31,9 +31,9 @@ func TestNewSnapshotResource(t *testing.T) {
 		t.Fatal("expected non-nil resource")
 	}
 
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*SnapshotResource)
-	var _ resource.ResourceWithImportState = r.(*SnapshotResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*SnapshotResource))
+	_ = resource.ResourceWithImportState(r.(*SnapshotResource))
 }
 
 func TestSnapshotResource_Metadata(t *testing.T) {

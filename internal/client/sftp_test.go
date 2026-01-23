@@ -3,110 +3,9 @@ package client
 import (
 	"context"
 	"errors"
-	"io/fs"
 	"strings"
 	"testing"
-	"time"
 )
-
-// mockSFTPClient is a test double for sftpClient interface
-type mockSFTPClient struct {
-	createFunc    func(path string) (sftpFile, error)
-	mkdirAllFunc  func(path string) error
-	statFunc      func(path string) (fs.FileInfo, error)
-	removeFunc    func(path string) error
-	removeDirFunc func(path string) error
-	removeAllFunc func(path string) error
-	openFunc      func(path string) (sftpFile, error)
-	chmodFunc     func(path string, mode fs.FileMode) error
-	chownFunc     func(path string, uid, gid int) error
-	readDirFunc   func(path string) ([]fs.FileInfo, error)
-	closeFunc     func() error
-}
-
-func (m *mockSFTPClient) Create(path string) (sftpFile, error) {
-	if m.createFunc != nil {
-		return m.createFunc(path)
-	}
-	return nil, nil
-}
-
-func (m *mockSFTPClient) MkdirAll(path string) error {
-	if m.mkdirAllFunc != nil {
-		return m.mkdirAllFunc(path)
-	}
-	return nil
-}
-
-func (m *mockSFTPClient) Stat(path string) (fs.FileInfo, error) {
-	if m.statFunc != nil {
-		return m.statFunc(path)
-	}
-	return nil, nil
-}
-
-func (m *mockSFTPClient) Remove(path string) error {
-	if m.removeFunc != nil {
-		return m.removeFunc(path)
-	}
-	return nil
-}
-
-func (m *mockSFTPClient) RemoveDirectory(path string) error {
-	if m.removeDirFunc != nil {
-		return m.removeDirFunc(path)
-	}
-	return nil
-}
-
-func (m *mockSFTPClient) RemoveAll(path string) error {
-	if m.removeAllFunc != nil {
-		return m.removeAllFunc(path)
-	}
-	return nil
-}
-
-func (m *mockSFTPClient) Open(path string) (sftpFile, error) {
-	if m.openFunc != nil {
-		return m.openFunc(path)
-	}
-	return nil, nil
-}
-
-func (m *mockSFTPClient) Chmod(path string, mode fs.FileMode) error {
-	if m.chmodFunc != nil {
-		return m.chmodFunc(path, mode)
-	}
-	return nil
-}
-
-func (m *mockSFTPClient) Chown(path string, uid, gid int) error {
-	if m.chownFunc != nil {
-		return m.chownFunc(path, uid, gid)
-	}
-	return nil
-}
-
-func (m *mockSFTPClient) ReadDir(path string) ([]fs.FileInfo, error) {
-	if m.readDirFunc != nil {
-		return m.readDirFunc(path)
-	}
-	return nil, nil
-}
-
-func (m *mockSFTPClient) Close() error {
-	if m.closeFunc != nil {
-		return m.closeFunc()
-	}
-	return nil
-}
-
-// mockSFTPFile is a test double for sftpFile interface
-type mockSFTPFile struct {
-	writeFunc func(p []byte) (int, error)
-	readFunc  func(p []byte) (int, error)
-	closeFunc func() error
-}
 
 // mockSSHSession is a test double for sshSession interface
 type mockSSHSession struct {
@@ -158,27 +57,6 @@ func (m *mockSSHClientWrapper) NewSession() (sshSession, error) {
 }
 
 func (m *mockSSHClientWrapper) Close() error {
-	if m.closeFunc != nil {
-		return m.closeFunc()
-	}
-	return nil
-}
-
-func (m *mockSFTPFile) Write(p []byte) (int, error) {
-	if m.writeFunc != nil {
-		return m.writeFunc(p)
-	}
-	return len(p), nil
-}
-
-func (m *mockSFTPFile) Read(p []byte) (int, error) {
-	if m.readFunc != nil {
-		return m.readFunc(p)
-	}
-	return 0, nil
-}
-
-func (m *mockSFTPFile) Close() error {
 	if m.closeFunc != nil {
 		return m.closeFunc()
 	}
@@ -262,18 +140,6 @@ func TestSSHClient_WriteFile_Error(t *testing.T) {
 		t.Fatal("expected error for API failure")
 	}
 }
-
-// mockFileInfo implements fs.FileInfo for testing
-type mockFileInfo struct {
-	size int64
-}
-
-func (m *mockFileInfo) Name() string       { return "test" }
-func (m *mockFileInfo) Size() int64        { return m.size }
-func (m *mockFileInfo) Mode() fs.FileMode  { return 0644 }
-func (m *mockFileInfo) ModTime() time.Time { return time.Now() }
-func (m *mockFileInfo) IsDir() bool        { return false }
-func (m *mockFileInfo) Sys() any           { return nil }
 
 func TestSSHClient_ReadFile_Success(t *testing.T) {
 	config := &SSHConfig{

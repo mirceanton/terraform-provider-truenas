@@ -173,7 +173,7 @@ func TestProvider_DataSources(t *testing.T) {
 	}
 
 	// Verify the return type
-	var _ []func() datasource.DataSource = dataSources
+	_ = ([]func() datasource.DataSource)(dataSources)
 
 	// Verify each factory function returns a valid data source
 	for i, factory := range dataSources {
@@ -200,7 +200,7 @@ func TestProvider_Resources(t *testing.T) {
 	}
 
 	// Verify the return type
-	var _ []func() resource.Resource = resources
+	_ = ([]func() resource.Resource)(resources)
 }
 
 // Test ED25519 key for testing (same as in client tests)
@@ -288,11 +288,15 @@ func createTestConfigureRequest(t *testing.T, host, authMethod string, ssh *SSHB
 			"host":        tftypes.String,
 			"auth_method": tftypes.String,
 			"ssh":         sshObjectType,
+			"rate_limit":  tftypes.Number,
+			"max_retries": tftypes.Number,
 		},
 	}, map[string]tftypes.Value{
 		"host":        tftypes.NewValue(tftypes.String, host),
 		"auth_method": tftypes.NewValue(tftypes.String, authMethod),
 		"ssh":         sshValue,
+		"rate_limit":  tftypes.NewValue(tftypes.Number, nil),
+		"max_retries": tftypes.NewValue(tftypes.Number, nil),
 	})
 
 	config, diags := tfsdk.Config{
@@ -428,6 +432,8 @@ func TestProvider_Configure_ConfigParseError(t *testing.T) {
 			"host":        tftypes.Number, // Wrong type!
 			"auth_method": tftypes.String,
 			"ssh":         sshObjectType,
+			"rate_limit":  tftypes.Number,
+			"max_retries": tftypes.Number,
 		},
 	}, map[string]tftypes.Value{
 		"host":        tftypes.NewValue(tftypes.Number, 123), // Wrong type!
@@ -439,6 +445,8 @@ func TestProvider_Configure_ConfigParseError(t *testing.T) {
 			"host_key_fingerprint": tftypes.NewValue(tftypes.String, testHostKeyFingerprint),
 			"max_sessions":         tftypes.NewValue(tftypes.Number, nil),
 		}),
+		"rate_limit":  tftypes.NewValue(tftypes.Number, nil),
+		"max_retries": tftypes.NewValue(tftypes.Number, nil),
 	})
 
 	config := tfsdk.Config{
@@ -484,6 +492,8 @@ func TestProvider_Configure_InvalidSSHClient(t *testing.T) {
 			"host":        tftypes.String,
 			"auth_method": tftypes.String,
 			"ssh":         sshObjectType,
+			"rate_limit":  tftypes.Number,
+			"max_retries": tftypes.Number,
 		},
 	}, map[string]tftypes.Value{
 		"host":        tftypes.NewValue(tftypes.String, "truenas.local"),
@@ -495,6 +505,8 @@ func TestProvider_Configure_InvalidSSHClient(t *testing.T) {
 			"host_key_fingerprint": tftypes.NewValue(tftypes.String, testHostKeyFingerprint),
 			"max_sessions":         tftypes.NewValue(tftypes.Number, nil),
 		}),
+		"rate_limit":  tftypes.NewValue(tftypes.Number, nil),
+		"max_retries": tftypes.NewValue(tftypes.Number, nil),
 	})
 
 	config := tfsdk.Config{
@@ -547,6 +559,39 @@ func TestTrueNASProvider_Resources_IncludesFile(t *testing.T) {
 
 	if !found {
 		t.Error("expected truenas_file resource to be registered")
+	}
+}
+
+func TestProviderSchema_RateLimitAttributes(t *testing.T) {
+	ctx := context.Background()
+	p := New("test")()
+
+	req := provider.SchemaRequest{}
+	resp := &provider.SchemaResponse{}
+	p.Schema(ctx, req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Check rate_limit attribute exists
+	rateLimitAttr, ok := resp.Schema.Attributes["rate_limit"]
+	if !ok {
+		t.Error("expected rate_limit attribute in schema")
+	} else {
+		if rateLimitAttr.IsRequired() {
+			t.Error("rate_limit should be optional")
+		}
+	}
+
+	// Check max_retries attribute exists
+	maxRetriesAttr, ok := resp.Schema.Attributes["max_retries"]
+	if !ok {
+		t.Error("expected max_retries attribute in schema")
+	} else {
+		if maxRetriesAttr.IsRequired() {
+			t.Error("max_retries should be optional")
+		}
 	}
 }
 

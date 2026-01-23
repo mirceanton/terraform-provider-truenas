@@ -14,7 +14,6 @@ import (
 
 	"al.essio.dev/pkg/shellescape"
 	"github.com/deevus/terraform-provider-truenas/internal/api"
-	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -113,83 +112,11 @@ func (r *realSSHClient) Close() error {
 	return r.client.Close()
 }
 
-// sftpClient abstracts SFTP operations for testing.
-type sftpClient interface {
-	Create(path string) (sftpFile, error)
-	MkdirAll(path string) error
-	Stat(path string) (fs.FileInfo, error)
-	Remove(path string) error
-	RemoveDirectory(path string) error
-	RemoveAll(path string) error
-	Open(path string) (sftpFile, error)
-	Chmod(path string, mode fs.FileMode) error
-	Chown(path string, uid, gid int) error
-	ReadDir(path string) ([]fs.FileInfo, error)
-	Close() error
-}
-
-// sftpFile abstracts SFTP file operations for testing.
-type sftpFile interface {
-	Write(p []byte) (int, error)
-	Read(p []byte) (int, error)
-	Close() error
-}
-
-// realSFTPClient wraps *sftp.Client for the interface.
-type realSFTPClient struct {
-	client *sftp.Client
-}
-
-func (r *realSFTPClient) Create(path string) (sftpFile, error) {
-	return r.client.Create(path)
-}
-
-func (r *realSFTPClient) MkdirAll(path string) error {
-	return r.client.MkdirAll(path)
-}
-
-func (r *realSFTPClient) Stat(path string) (fs.FileInfo, error) {
-	return r.client.Stat(path)
-}
-
-func (r *realSFTPClient) Remove(path string) error {
-	return r.client.Remove(path)
-}
-
-func (r *realSFTPClient) RemoveDirectory(path string) error {
-	return r.client.RemoveDirectory(path)
-}
-
-func (r *realSFTPClient) RemoveAll(path string) error {
-	return r.client.RemoveAll(path)
-}
-
-func (r *realSFTPClient) Open(path string) (sftpFile, error) {
-	return r.client.Open(path)
-}
-
-func (r *realSFTPClient) Chmod(path string, mode fs.FileMode) error {
-	return r.client.Chmod(path, mode)
-}
-
-func (r *realSFTPClient) Chown(path string, uid, gid int) error {
-	return r.client.Chown(path, uid, gid)
-}
-
-func (r *realSFTPClient) ReadDir(path string) ([]fs.FileInfo, error) {
-	return r.client.ReadDir(path)
-}
-
-func (r *realSFTPClient) Close() error {
-	return r.client.Close()
-}
-
 // SSHClient implements Client interface using SSH/midclt.
 type SSHClient struct {
 	config        *SSHConfig
 	client        *ssh.Client
 	clientWrapper sshClientWrapper
-	sftpClient    sftpClient
 	dialer        sshDialer
 	mu            sync.Mutex
 	sessionSem    chan struct{} // limits concurrent SSH sessions
@@ -320,7 +247,7 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 	if err != nil {
 		return nil, err
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// Execute command - use CombinedOutput to capture stderr for error messages
 	output, err := session.CombinedOutput(cmd)
@@ -364,7 +291,7 @@ func (c *SSHClient) CallAndWait(ctx context.Context, method string, params any) 
 	if err != nil {
 		return nil, err
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// Execute command - use CombinedOutput to capture stderr for error messages
 	output, err := session.CombinedOutput(cmd)
@@ -393,11 +320,6 @@ func (c *SSHClient) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.sftpClient != nil {
-		c.sftpClient.Close()
-		c.sftpClient = nil
-	}
-
 	if c.clientWrapper == nil {
 		return nil
 	}
@@ -424,32 +346,6 @@ func (c *SSHClient) GetVersion(ctx context.Context) (api.Version, error) {
 		c.version, c.versionErr = api.ParseVersion(raw)
 	})
 	return c.version, c.versionErr
-}
-
-// connectSFTP establishes the SFTP connection if not already connected.
-func (c *SSHClient) connectSFTP() error {
-	// First ensure SSH is connected (this has its own locking)
-	if err := c.connect(); err != nil {
-		return err
-	}
-
-	// Now lock to check/set SFTP client
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	// Already have SFTP client (double-check after acquiring lock)
-	if c.sftpClient != nil {
-		return nil
-	}
-
-	// Create SFTP client
-	sftpConn, err := sftp.NewClient(c.client)
-	if err != nil {
-		return fmt.Errorf("failed to create SFTP client: %w", err)
-	}
-
-	c.sftpClient = &realSFTPClient{client: sftpConn}
-	return nil
 }
 
 // WriteFile writes content to a file on the remote system using the TrueNAS
@@ -518,7 +414,7 @@ func (c *SSHClient) runSudo(ctx context.Context, args ...string) error {
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// Execute command
 	output, err := session.CombinedOutput(cmd)
@@ -552,7 +448,7 @@ func (c *SSHClient) runSudoOutput(ctx context.Context, args ...string) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	output, err := session.Output(cmd)
 	if err != nil {

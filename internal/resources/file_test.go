@@ -21,10 +21,10 @@ func TestNewFileResource(t *testing.T) {
 	}
 
 	// Verify it implements the required interfaces
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*FileResource)
-	var _ resource.ResourceWithImportState = r.(*FileResource)
-	var _ resource.ResourceWithValidateConfig = r.(*FileResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*FileResource))
+	_ = resource.ResourceWithImportState(r.(*FileResource))
+	_ = resource.ResourceWithValidateConfig(r.(*FileResource))
 }
 
 func TestFileResource_Metadata(t *testing.T) {

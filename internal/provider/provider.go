@@ -20,6 +20,8 @@ type TrueNASProviderModel struct {
 	Host       types.String   `tfsdk:"host"`
 	AuthMethod types.String   `tfsdk:"auth_method"`
 	SSH        *SSHBlockModel `tfsdk:"ssh"`
+	RateLimit  types.Int64    `tfsdk:"rate_limit"`
+	MaxRetries types.Int64    `tfsdk:"max_retries"`
 }
 
 // SSHBlockModel describes the SSH configuration block.
@@ -59,6 +61,16 @@ func (p *TrueNASProvider) Schema(ctx context.Context, req provider.SchemaRequest
 			"auth_method": schema.StringAttribute{
 				Description: "Authentication method. Currently only 'ssh' is supported.",
 				Required:    true,
+			},
+			"rate_limit": schema.Int64Attribute{
+				Description: "Maximum API calls per minute. Default: 300 (5 per second). " +
+					"Set to 0 to disable rate limiting.",
+				Optional: true,
+			},
+			"max_retries": schema.Int64Attribute{
+				Description: "Maximum retry attempts for transient connection errors. Default: 3. " +
+					"Set to 0 to disable retries.",
+				Optional: true,
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -150,9 +162,28 @@ func (p *TrueNASProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
+	// Apply rate limiting defaults
+	rateLimit := 0 // 0 means use default (18)
+	if !config.RateLimit.IsNull() {
+		rateLimit = int(config.RateLimit.ValueInt64())
+	}
+
+	maxRetries := -1 // -1 means use default (3)
+	if !config.MaxRetries.IsNull() {
+		maxRetries = int(config.MaxRetries.ValueInt64())
+	}
+
+	// Wrap client with rate limiting and retry
+	rateLimitedClient := client.NewRateLimitedClient(
+		sshClient,
+		rateLimit,
+		maxRetries,
+		&client.SSHRetryClassifier{},
+	)
+
 	// Set client for data sources and resources
-	resp.DataSourceData = sshClient
-	resp.ResourceData = sshClient
+	resp.DataSourceData = rateLimitedClient
+	resp.ResourceData = rateLimitedClient
 }
 
 func (p *TrueNASProvider) DataSources(ctx context.Context) []func() datasource.DataSource {

@@ -20,10 +20,10 @@ func TestNewDatasetResource(t *testing.T) {
 	}
 
 	// Verify it implements the required interfaces
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*DatasetResource)
-	var _ resource.ResourceWithImportState = r.(*DatasetResource)
-	var _ resource.ResourceWithValidateConfig = r.(*DatasetResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*DatasetResource))
+	_ = resource.ResourceWithImportState(r.(*DatasetResource))
+	_ = resource.ResourceWithValidateConfig(r.(*DatasetResource))
 }
 
 func TestDatasetResource_ValidateConfig_ModeRequiredWithUID(t *testing.T) {
@@ -1494,9 +1494,9 @@ func stringValue(s string) types.String {
 func TestDatasetResource_ImplementsInterfaces(t *testing.T) {
 	r := NewDatasetResource()
 
-	var _ resource.Resource = r
-	var _ resource.ResourceWithConfigure = r.(*DatasetResource)
-	var _ resource.ResourceWithImportState = r.(*DatasetResource)
+	_ = resource.Resource(r)
+	_ = resource.ResourceWithConfigure(r.(*DatasetResource))
+	_ = resource.ResourceWithImportState(r.(*DatasetResource))
 }
 
 // Additional test for Create with all optional parameters
