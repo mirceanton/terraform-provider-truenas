@@ -6,6 +6,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.10.0] - 2026-01-26
+
+
+### Added
+
+- **dataset:** Add ValidateConfig for mode requirement
+- **cron_job:** Rename stdout/stderr to capture_stdout/capture_stderr (#14)
+- Add rate limiting and retry logic (#16)
+- Add JSON-RPC WebSocket transport for TrueNAS API calls (#17)
+
+### Changed
+
+- **dataset:** Remove unreachable stripacl fallback
+
+### Documentation
+
+- Add design for mode validation with uid/gid
+- Add implementation plan for mode validation
+- **dataset:** Document mode requirement with uid/gid
+
+### Testing
+
+- **dataset:** Add ValidateConfig tests for mode requirement
+- **dataset:** Verify ValidateConfig interface in TestNewDatasetResource
+- **dataset:** Remove obsolete stripacl test
+
 ## [0.9.0] - 2026-01-21
 
 
