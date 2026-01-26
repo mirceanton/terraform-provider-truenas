@@ -2,6 +2,8 @@ package provider
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/deevus/terraform-provider-truenas/internal/datasources"
@@ -17,11 +19,12 @@ var _ provider.Provider = &TrueNASProvider{}
 
 // TrueNASProviderModel describes the provider data model.
 type TrueNASProviderModel struct {
-	Host       types.String   `tfsdk:"host"`
-	AuthMethod types.String   `tfsdk:"auth_method"`
-	SSH        *SSHBlockModel `tfsdk:"ssh"`
-	RateLimit  types.Int64    `tfsdk:"rate_limit"`
-	MaxRetries types.Int64    `tfsdk:"max_retries"`
+	Host       types.String         `tfsdk:"host"`
+	AuthMethod types.String         `tfsdk:"auth_method"`
+	SSH        *SSHBlockModel       `tfsdk:"ssh"`
+	WebSocket  *WebSocketBlockModel `tfsdk:"websocket"`
+	RateLimit  types.Int64          `tfsdk:"rate_limit"`
+	MaxRetries types.Int64          `tfsdk:"max_retries"`
 }
 
 // SSHBlockModel describes the SSH configuration block.
@@ -31,6 +34,17 @@ type SSHBlockModel struct {
 	PrivateKey         types.String `tfsdk:"private_key"`
 	HostKeyFingerprint types.String `tfsdk:"host_key_fingerprint"`
 	MaxSessions        types.Int64  `tfsdk:"max_sessions"`
+}
+
+// WebSocketBlockModel describes the WebSocket configuration block.
+type WebSocketBlockModel struct {
+	Username           types.String `tfsdk:"username"`
+	APIKey             types.String `tfsdk:"api_key"`
+	Port               types.Int64  `tfsdk:"port"`
+	InsecureSkipVerify types.Bool   `tfsdk:"insecure_skip_verify"`
+	MaxConcurrent      types.Int64  `tfsdk:"max_concurrent"`
+	ConnectTimeout     types.Int64  `tfsdk:"connect_timeout"`
+	MaxRetries         types.Int64  `tfsdk:"max_retries"`
 }
 
 type TrueNASProvider struct {
@@ -59,7 +73,7 @@ func (p *TrueNASProvider) Schema(ctx context.Context, req provider.SchemaRequest
 				Required:    true,
 			},
 			"auth_method": schema.StringAttribute{
-				Description: "Authentication method. Currently only 'ssh' is supported.",
+				Description: "Authentication method: 'ssh' or 'websocket'. WebSocket requires both websocket and ssh blocks (ssh is used for fallback operations).",
 				Required:    true,
 			},
 			"rate_limit": schema.Int64Attribute{
@@ -103,6 +117,40 @@ func (p *TrueNASProvider) Schema(ctx context.Context, req provider.SchemaRequest
 					},
 				},
 			},
+			"websocket": schema.SingleNestedBlock{
+				Description: "WebSocket connection configuration. Required when auth_method is 'websocket'.",
+				Attributes: map[string]schema.Attribute{
+					"username": schema.StringAttribute{
+						Description: "TrueNAS username associated with the API key. Usually 'root'.",
+						Required:    true,
+					},
+					"api_key": schema.StringAttribute{
+						Description: "TrueNAS API key for authentication.",
+						Required:    true,
+						Sensitive:   true,
+					},
+					"port": schema.Int64Attribute{
+						Description: "WebSocket port. Defaults to 443.",
+						Optional:    true,
+					},
+					"insecure_skip_verify": schema.BoolAttribute{
+						Description: "Skip TLS certificate verification. Defaults to false.",
+						Optional:    true,
+					},
+					"max_concurrent": schema.Int64Attribute{
+						Description: "Maximum concurrent in-flight requests. Defaults to 20.",
+						Optional:    true,
+					},
+					"connect_timeout": schema.Int64Attribute{
+						Description: "Connection timeout in seconds. Defaults to 30.",
+						Optional:    true,
+					},
+					"max_retries": schema.Int64Attribute{
+						Description: "Maximum retry attempts for transient errors. Defaults to 3.",
+						Optional:    true,
+					},
+				},
+			},
 		},
 	}
 }
@@ -116,74 +164,155 @@ func (p *TrueNASProvider) Configure(ctx context.Context, req provider.ConfigureR
 		return
 	}
 
-	// Validate auth_method is "ssh"
-	if config.AuthMethod.ValueString() != "ssh" {
+	var finalClient client.Client
+
+	switch config.AuthMethod.ValueString() {
+	case "websocket":
+		// Validate websocket block
+		if config.WebSocket == nil {
+			resp.Diagnostics.AddError(
+				"Missing WebSocket Configuration",
+				"WebSocket block is required when auth_method is 'websocket'.",
+			)
+			return
+		}
+
+		// Validate SSH block (needed for fallback)
+		if config.SSH == nil {
+			resp.Diagnostics.AddError(
+				"Missing SSH Configuration",
+				"SSH block is required for fallback operations when auth_method is 'websocket'.",
+			)
+			return
+		}
+
+		// Create SSH client for fallback
+		sshConfig := &client.SSHConfig{
+			Host:               config.Host.ValueString(),
+			PrivateKey:         config.SSH.PrivateKey.ValueString(),
+			HostKeyFingerprint: config.SSH.HostKeyFingerprint.ValueString(),
+		}
+		if !config.SSH.Port.IsNull() {
+			sshConfig.Port = int(config.SSH.Port.ValueInt64())
+		}
+		if !config.SSH.User.IsNull() {
+			sshConfig.User = config.SSH.User.ValueString()
+		}
+		if !config.SSH.MaxSessions.IsNull() {
+			sshConfig.MaxSessions = int(config.SSH.MaxSessions.ValueInt64())
+		}
+
+		sshClient, err := client.NewSSHClient(sshConfig)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Create SSH Client",
+				err.Error(),
+			)
+			return
+		}
+
+		// Create WebSocket client
+		wsConfig := client.WebSocketConfig{
+			Host:     config.Host.ValueString(),
+			Username: config.WebSocket.Username.ValueString(),
+			APIKey:   config.WebSocket.APIKey.ValueString(),
+			Fallback: sshClient,
+		}
+		if !config.WebSocket.Port.IsNull() {
+			wsConfig.Port = int(config.WebSocket.Port.ValueInt64())
+		}
+		if !config.WebSocket.InsecureSkipVerify.IsNull() {
+			wsConfig.InsecureSkipVerify = config.WebSocket.InsecureSkipVerify.ValueBool()
+		}
+		if !config.WebSocket.MaxConcurrent.IsNull() {
+			wsConfig.MaxConcurrent = int(config.WebSocket.MaxConcurrent.ValueInt64())
+		}
+		if !config.WebSocket.ConnectTimeout.IsNull() {
+			wsConfig.ConnectTimeout = time.Duration(config.WebSocket.ConnectTimeout.ValueInt64()) * time.Second
+		}
+		if !config.WebSocket.MaxRetries.IsNull() {
+			wsConfig.MaxRetries = int(config.WebSocket.MaxRetries.ValueInt64())
+		}
+
+		wsClient, err := client.NewWebSocketClient(wsConfig)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Create WebSocket Client",
+				err.Error(),
+			)
+			return
+		}
+
+		finalClient = wsClient
+
+	case "ssh", "":
+		// Validate SSH block is provided
+		if config.SSH == nil {
+			resp.Diagnostics.AddError(
+				"Missing SSH Configuration",
+				"SSH block is required when auth_method is 'ssh'.",
+			)
+			return
+		}
+
+		// Build SSH config with values from provider configuration
+		sshConfig := &client.SSHConfig{
+			Host:               config.Host.ValueString(),
+			PrivateKey:         config.SSH.PrivateKey.ValueString(),
+			HostKeyFingerprint: config.SSH.HostKeyFingerprint.ValueString(),
+		}
+
+		// Set optional values if provided
+		if !config.SSH.Port.IsNull() {
+			sshConfig.Port = int(config.SSH.Port.ValueInt64())
+		}
+		if !config.SSH.User.IsNull() {
+			sshConfig.User = config.SSH.User.ValueString()
+		}
+		if !config.SSH.MaxSessions.IsNull() {
+			sshConfig.MaxSessions = int(config.SSH.MaxSessions.ValueInt64())
+		}
+
+		// Create SSH client (validates config and applies defaults)
+		sshClient, err := client.NewSSHClient(sshConfig)
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Create SSH Client",
+				err.Error(),
+			)
+			return
+		}
+
+		// Apply rate limiting defaults
+		rateLimit := 0 // 0 means use default (18)
+		if !config.RateLimit.IsNull() {
+			rateLimit = int(config.RateLimit.ValueInt64())
+		}
+
+		maxRetries := -1 // -1 means use default (3)
+		if !config.MaxRetries.IsNull() {
+			maxRetries = int(config.MaxRetries.ValueInt64())
+		}
+
+		// Wrap client with rate limiting and retry
+		finalClient = client.NewRateLimitedClient(
+			sshClient,
+			rateLimit,
+			maxRetries,
+			&client.SSHRetryClassifier{},
+		)
+
+	default:
 		resp.Diagnostics.AddError(
 			"Invalid Authentication Method",
-			"Only 'ssh' authentication method is currently supported.",
+			fmt.Sprintf("auth_method must be 'ssh' or 'websocket', got '%s'.", config.AuthMethod.ValueString()),
 		)
 		return
 	}
-
-	// Validate SSH block is provided
-	if config.SSH == nil {
-		resp.Diagnostics.AddError(
-			"Missing SSH Configuration",
-			"SSH block is required when auth_method is 'ssh'.",
-		)
-		return
-	}
-
-	// Build SSH config with values from provider configuration
-	sshConfig := &client.SSHConfig{
-		Host:               config.Host.ValueString(),
-		PrivateKey:         config.SSH.PrivateKey.ValueString(),
-		HostKeyFingerprint: config.SSH.HostKeyFingerprint.ValueString(),
-	}
-
-	// Set optional values if provided
-	if !config.SSH.Port.IsNull() {
-		sshConfig.Port = int(config.SSH.Port.ValueInt64())
-	}
-	if !config.SSH.User.IsNull() {
-		sshConfig.User = config.SSH.User.ValueString()
-	}
-	if !config.SSH.MaxSessions.IsNull() {
-		sshConfig.MaxSessions = int(config.SSH.MaxSessions.ValueInt64())
-	}
-
-	// Create SSH client (validates config and applies defaults)
-	sshClient, err := client.NewSSHClient(sshConfig)
-	if err != nil {
-		resp.Diagnostics.AddError(
-			"Unable to Create SSH Client",
-			err.Error(),
-		)
-		return
-	}
-
-	// Apply rate limiting defaults
-	rateLimit := 0 // 0 means use default (18)
-	if !config.RateLimit.IsNull() {
-		rateLimit = int(config.RateLimit.ValueInt64())
-	}
-
-	maxRetries := -1 // -1 means use default (3)
-	if !config.MaxRetries.IsNull() {
-		maxRetries = int(config.MaxRetries.ValueInt64())
-	}
-
-	// Wrap client with rate limiting and retry
-	rateLimitedClient := client.NewRateLimitedClient(
-		sshClient,
-		rateLimit,
-		maxRetries,
-		&client.SSHRetryClassifier{},
-	)
 
 	// Set client for data sources and resources
-	resp.DataSourceData = rateLimitedClient
-	resp.ResourceData = rateLimitedClient
+	resp.DataSourceData = finalClient
+	resp.ResourceData = finalClient
 }
 
 func (p *TrueNASProvider) DataSources(ctx context.Context) []func() datasource.DataSource {

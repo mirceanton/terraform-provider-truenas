@@ -1,6 +1,8 @@
 package client
 
 import (
+	"errors"
+	"io"
 	"math/rand"
 	"strings"
 	"time"
@@ -55,6 +57,55 @@ func (c *SSHRetryClassifier) IsRetriable(err error) bool {
 		if strings.Contains(msg, pattern) {
 			return true
 		}
+	}
+
+	return false
+}
+
+// WebSocketRetryClassifier classifies errors from WebSocket/JSON-RPC.
+type WebSocketRetryClassifier struct{}
+
+// IsRetriable returns true if the error is a transient failure.
+func (c *WebSocketRetryClassifier) IsRetriable(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// JSON-RPC errors
+	var rpcErr *JSONRPCError
+	if errors.As(err, &rpcErr) {
+		switch rpcErr.Code {
+		case ErrCodeInternal:
+			// Internal connection errors are retriable (connection dropped)
+			return true
+		case ErrCodeTooManyConcurrent:
+			return true
+		case ErrCodeTrueNASCall:
+			if rpcErr.Data != nil {
+				// EAGAIN (11) and EBUSY (16) are retriable
+				if rpcErr.Data.Error == 11 || rpcErr.Data.Error == 16 {
+					return true
+				}
+				// ENOTAUTHENTICATED is retriable (session expired, need to reconnect)
+				if strings.Contains(rpcErr.Data.Reason, "ENOTAUTHENTICATED") {
+					return true
+				}
+			}
+			return false
+		default:
+			return false
+		}
+	}
+
+	// Connection errors
+	if errors.Is(err, io.EOF) {
+		return true
+	}
+
+	// WebSocket close errors
+	msg := err.Error()
+	if strings.Contains(msg, "websocket: close") {
+		return true
 	}
 
 	return false

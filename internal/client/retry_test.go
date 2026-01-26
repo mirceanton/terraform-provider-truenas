@@ -2,6 +2,7 @@ package client
 
 import (
 	"errors"
+	"io"
 	"testing"
 	"time"
 )
@@ -117,5 +118,80 @@ func TestCalculateBackoff_Deterministic(t *testing.T) {
 	}
 	if result2 < minWant || result2 > maxWant {
 		t.Errorf("second call: got %v, want between %v and %v", result2, minWant, maxWant)
+	}
+}
+
+func TestWebSocketRetryClassifier_IsRetriable(t *testing.T) {
+	classifier := &WebSocketRetryClassifier{}
+
+	tests := []struct {
+		name      string
+		err       error
+		retriable bool
+	}{
+		{
+			name:      "nil error",
+			err:       nil,
+			retriable: false,
+		},
+		{
+			name:      "internal connection error",
+			err:       &JSONRPCError{Code: ErrCodeInternal, Message: "connection closed"},
+			retriable: true,
+		},
+		{
+			name:      "too many concurrent calls",
+			err:       &JSONRPCError{Code: ErrCodeTooManyConcurrent, Message: "Too many concurrent calls"},
+			retriable: true,
+		},
+		{
+			name:      "truenas call error - not retriable",
+			err:       &JSONRPCError{Code: ErrCodeTrueNASCall, Message: "Validation error"},
+			retriable: false,
+		},
+		{
+			name:      "truenas call error - EAGAIN retriable",
+			err:       &JSONRPCError{Code: ErrCodeTrueNASCall, Message: "Resource busy", Data: &JSONRPCData{Error: 11}},
+			retriable: true,
+		},
+		{
+			name:      "truenas call error - EBUSY retriable",
+			err:       &JSONRPCError{Code: ErrCodeTrueNASCall, Message: "Device busy", Data: &JSONRPCData{Error: 16}},
+			retriable: true,
+		},
+		{
+			name:      "truenas call error - EINVAL not retriable",
+			err:       &JSONRPCError{Code: ErrCodeTrueNASCall, Message: "Invalid argument", Data: &JSONRPCData{Error: 22}},
+			retriable: false,
+		},
+		{
+			name:      "truenas call error - ENOTAUTHENTICATED retriable",
+			err:       &JSONRPCError{Code: ErrCodeTrueNASCall, Message: "Not authenticated", Data: &JSONRPCData{Reason: "[ENOTAUTHENTICATED] Not authenticated"}},
+			retriable: true,
+		},
+		{
+			name:      "connection closed error",
+			err:       errors.New("websocket: close sent"),
+			retriable: true,
+		},
+		{
+			name:      "EOF error",
+			err:       io.EOF,
+			retriable: true,
+		},
+		{
+			name:      "random error",
+			err:       errors.New("something went wrong"),
+			retriable: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := classifier.IsRetriable(tt.err)
+			if got != tt.retriable {
+				t.Errorf("IsRetriable() = %v, want %v", got, tt.retriable)
+			}
+		})
 	}
 }
