@@ -1600,6 +1600,59 @@ func TestAppResource_Read_PreservesDesiredState(t *testing.T) {
 	}
 }
 
+// TestAppResource_Read_PreservesDesiredStateCase verifies that Read preserves
+// the user's original case for desired_state (bug fix for "planned value does
+// not match config value" errors).
+func TestAppResource_Read_PreservesDesiredStateCase(t *testing.T) {
+	r := &AppResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[{
+					"name": "myapp",
+					"state": "STOPPED",
+					"custom_app": true,
+					"config": {}
+				}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getAppResourceSchema(t)
+
+	// Prior state has lowercase desired_state = "stopped"
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "stopped", float64(120), "STOPPED")
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Read(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	var model AppResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+
+	// Critical: desired_state should preserve user's lowercase "stopped"
+	if model.DesiredState.ValueString() != "stopped" {
+		t.Errorf("expected lowercase 'stopped' to be preserved, got %q", model.DesiredState.ValueString())
+	}
+}
+
 func TestAppResource_Read_DefaultsDesiredStateWhenNull(t *testing.T) {
 	r := &AppResource{
 		client: &client.MockClient{
@@ -1716,6 +1769,100 @@ func TestAppResource_Create_WithDesiredStateStopped(t *testing.T) {
 	}
 	if model.State.ValueString() != "STOPPED" {
 		t.Errorf("expected final state STOPPED, got %q", model.State.ValueString())
+	}
+	// Verify desired_state preserves user's original case (bug fix: lowercase should stay lowercase)
+	if model.DesiredState.ValueString() != "stopped" {
+		t.Errorf("expected desired_state to preserve user's lowercase 'stopped', got %q", model.DesiredState.ValueString())
+	}
+}
+
+// TestAppResource_Create_DesiredStateCasePreservation tests that user-specified
+// desired_state values are preserved exactly as written (case-insensitive comparison
+// but case-preserving storage). This prevents Terraform "planned value does not match
+// config value" errors when users specify lowercase values like "stopped".
+func TestAppResource_Create_DesiredStateCasePreservation(t *testing.T) {
+	tests := []struct {
+		name          string
+		inputDesired  string
+		expectedState string // API always returns uppercase
+	}{
+		{
+			name:          "lowercase stopped",
+			inputDesired:  "stopped",
+			expectedState: "STOPPED",
+		},
+		{
+			name:          "uppercase STOPPED",
+			inputDesired:  "STOPPED",
+			expectedState: "STOPPED",
+		},
+		{
+			name:          "lowercase running",
+			inputDesired:  "running",
+			expectedState: "RUNNING",
+		},
+		{
+			name:          "mixed case Running",
+			inputDesired:  "Running",
+			expectedState: "RUNNING",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var methods []string
+			r := &AppResource{
+				client: &client.MockClient{
+					CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+						methods = append(methods, method)
+						return nil, nil
+					},
+					CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+						// Simulate API returning state based on what was requested
+						return json.RawMessage(`[{"name": "myapp", "state": "` + tc.expectedState + `"}]`), nil
+					},
+				},
+			}
+
+			schemaResp := getAppResourceSchema(t)
+			planValue := createAppResourceModelValue(nil, "myapp", true, nil, tc.inputDesired, float64(120), nil)
+
+			req := resource.CreateRequest{
+				Plan: tfsdk.Plan{
+					Schema: schemaResp.Schema,
+					Raw:    planValue,
+				},
+			}
+
+			resp := &resource.CreateResponse{
+				State: tfsdk.State{
+					Schema: schemaResp.Schema,
+				},
+			}
+
+			r.Create(context.Background(), req, resp)
+
+			if resp.Diagnostics.HasError() {
+				t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+			}
+
+			var model AppResourceModel
+			diags := resp.State.Get(context.Background(), &model)
+			if diags.HasError() {
+				t.Fatalf("failed to get state: %v", diags)
+			}
+
+			// Key assertion: desired_state should preserve user's original case
+			// This is critical to prevent "planned value does not match config value" errors
+			if model.DesiredState.ValueString() != tc.inputDesired {
+				t.Errorf("desired_state was not preserved: expected %q, got %q", tc.inputDesired, model.DesiredState.ValueString())
+			}
+
+			// State should reflect the API's response (always uppercase)
+			if model.State.ValueString() != tc.expectedState {
+				t.Errorf("state mismatch: expected %q, got %q", tc.expectedState, model.State.ValueString())
+			}
+		})
 	}
 }
 
@@ -2343,5 +2490,73 @@ func TestAppResource_Update_RestartTriggersStartError(t *testing.T) {
 	}
 	if !foundError {
 		t.Error("expected error with 'Unable to Start App for Restart' message")
+	}
+}
+
+// TestAppResource_Update_DesiredStateCasePreservation verifies that Update preserves
+// the user's original case for desired_state (bug fix for "planned value does not
+// match config value" errors).
+func TestAppResource_Update_DesiredStateCasePreservation(t *testing.T) {
+	r := &AppResource{
+		client: &client.MockClient{
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return nil, nil
+			},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[{
+					"name": "myapp",
+					"state": "STOPPED",
+					"custom_app": true,
+					"config": {}
+				}]`), nil
+			},
+		},
+	}
+
+	schemaResp := getAppResourceSchema(t)
+
+	// Prior state has uppercase "RUNNING"
+	stateValue := createAppResourceModelValue("myapp", "myapp", true, nil, "RUNNING", float64(120), "RUNNING")
+
+	// Plan has lowercase "stopped" (user changed config to use lowercase)
+	planValue := createAppResourceModelValue("myapp", "myapp", true, nil, "stopped", float64(120), nil)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+		Plan: tfsdk.Plan{
+			Schema: schemaResp.Schema,
+			Raw:    planValue,
+		},
+	}
+
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	var model AppResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+
+	// Critical: desired_state should preserve user's lowercase "stopped"
+	if model.DesiredState.ValueString() != "stopped" {
+		t.Errorf("expected lowercase 'stopped' to be preserved, got %q", model.DesiredState.ValueString())
+	}
+
+	// State should reflect the actual API state
+	if model.State.ValueString() != "STOPPED" {
+		t.Errorf("expected state 'STOPPED', got %q", model.State.ValueString())
 	}
 }
