@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.11.0] - 2026-01-28
+
+
+### Added
+
+- Add case-insensitive string custom type for semantic equality
+- Enrich TrueNAS job errors with app lifecycle log details
+- **cloudsync:** Add include parameter support (#18)
+- **cloudsync:** Add TrueNAS 24.x API compatibility for credentials (#19)
+
+### Changed
+
+- Make WebSocket credentials optional in schema
+- Improve test helper readability with structured parameters
+- **api:** Add GetVersionOrDiag helper to reduce duplication
+
+### Documentation
+
+- Clarify TrueNAS 25.0+ requirement for WebSocket transport
+
+### Fixed
+
+- Enforce TrueNAS 25.0+ requirement for WebSocket transport
+- Preserve user-specified case in desired_state attribute
+- **app:** Resolve Value Conversion Error for CaseInsensitiveStringType
+- **dataset:** Convert quota/refquota to integers for API compatibility (#20)
+
+### Miscellaneous
+
+- Remove outdated planning documents
+
+### Testing
+
+- Add coverage for desired_state case preservation behavior
+
 ## [0.10.0] - 2026-01-26
 
 
