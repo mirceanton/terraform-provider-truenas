@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/deevus/terraform-provider-truenas/internal/api"
 	"github.com/deevus/terraform-provider-truenas/internal/client"
+	customtypes "github.com/deevus/terraform-provider-truenas/internal/types"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -27,22 +29,22 @@ type DatasetResource struct {
 
 // DatasetResourceModel describes the resource data model.
 type DatasetResourceModel struct {
-	ID           types.String `tfsdk:"id"`
-	Pool         types.String `tfsdk:"pool"`
-	Path         types.String `tfsdk:"path"`
-	Parent       types.String `tfsdk:"parent"`
-	Name         types.String `tfsdk:"name"`
-	MountPath    types.String `tfsdk:"mount_path"`
-	FullPath     types.String `tfsdk:"full_path"`
-	Compression  types.String `tfsdk:"compression"`
-	Quota        types.String `tfsdk:"quota"`
-	RefQuota     types.String `tfsdk:"refquota"`
-	Atime        types.String `tfsdk:"atime"`
-	Mode         types.String `tfsdk:"mode"`
-	UID          types.Int64  `tfsdk:"uid"`
-	GID          types.Int64  `tfsdk:"gid"`
-	ForceDestroy types.Bool   `tfsdk:"force_destroy"`
-	SnapshotID   types.String `tfsdk:"snapshot_id"`
+	ID           types.String                   `tfsdk:"id"`
+	Pool         types.String                   `tfsdk:"pool"`
+	Path         types.String                   `tfsdk:"path"`
+	Parent       types.String                   `tfsdk:"parent"`
+	Name         types.String                   `tfsdk:"name"`
+	MountPath    types.String                   `tfsdk:"mount_path"`
+	FullPath     types.String                   `tfsdk:"full_path"`
+	Compression  types.String                   `tfsdk:"compression"`
+	Quota        customtypes.SizeStringValue    `tfsdk:"quota"`
+	RefQuota     customtypes.SizeStringValue    `tfsdk:"refquota"`
+	Atime        types.String                   `tfsdk:"atime"`
+	Mode         types.String                   `tfsdk:"mode"`
+	UID          types.Int64                    `tfsdk:"uid"`
+	GID          types.Int64                    `tfsdk:"gid"`
+	ForceDestroy types.Bool                     `tfsdk:"force_destroy"`
+	SnapshotID   types.String                   `tfsdk:"snapshot_id"`
 }
 
 // datasetCreateResponse represents the JSON response from pool.dataset.create.
@@ -58,14 +60,20 @@ type datasetQueryResponse struct {
 	Name        string             `json:"name"`
 	Mountpoint  string             `json:"mountpoint"`
 	Compression propertyValueField `json:"compression"`
-	Quota       propertyValueField `json:"quota"`
-	RefQuota    propertyValueField `json:"refquota"`
+	Quota       sizePropertyField  `json:"quota"`
+	RefQuota    sizePropertyField  `json:"refquota"`
 	Atime       propertyValueField `json:"atime"`
 }
 
 // propertyValueField represents the nested property value in API responses.
 type propertyValueField struct {
 	Value string `json:"value"`
+}
+
+// sizePropertyField represents a size property with parsed bytes value.
+type sizePropertyField struct {
+	Parsed int64  `json:"parsed"`
+	Value  string `json:"value"`
 }
 
 // datasetStatResponse represents the JSON response from filesystem.stat.
@@ -102,8 +110,9 @@ func mapDatasetToModel(ds *datasetQueryResponse, data *DatasetResourceModel) {
 	data.MountPath = types.StringValue(ds.Mountpoint)
 	data.FullPath = types.StringValue(ds.Mountpoint)
 	data.Compression = types.StringValue(ds.Compression.Value)
-	data.Quota = types.StringValue(ds.Quota.Value)
-	data.RefQuota = types.StringValue(ds.RefQuota.Value)
+	// Store quota/refquota as bytes string - semantic equality handles comparison
+	data.Quota = customtypes.NewSizeStringValue(fmt.Sprintf("%d", ds.Quota.Parsed))
+	data.RefQuota = customtypes.NewSizeStringValue(fmt.Sprintf("%d", ds.RefQuota.Parsed))
 	data.Atime = types.StringValue(ds.Atime.Value)
 }
 
@@ -184,17 +193,21 @@ func (r *DatasetResource) Schema(ctx context.Context, req resource.SchemaRequest
 				},
 			},
 			"quota": schema.StringAttribute{
-				Description: "Dataset quota (e.g., '10G', '1T').",
-				Optional:    true,
-				Computed:    true,
+				CustomType: customtypes.SizeStringType{},
+				Description: "Dataset quota. Accepts human-readable sizes (e.g., '10G', '500M', '1T') or bytes. " +
+					"See https://pkg.go.dev/github.com/dustin/go-humanize#ParseBytes for format details.",
+				Optional: true,
+				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
 			},
 			"refquota": schema.StringAttribute{
-				Description: "Dataset reference quota (e.g., '10G', '1T').",
-				Optional:    true,
-				Computed:    true,
+				CustomType: customtypes.SizeStringType{},
+				Description: "Dataset reference quota. Accepts human-readable sizes (e.g., '10G', '500M', '1T') or bytes. " +
+					"See https://pkg.go.dev/github.com/dustin/go-humanize#ParseBytes for format details.",
+				Optional: true,
+				Computed: true,
 				PlanModifiers: []planmodifier.String{
 					stringplanmodifier.UseStateForUnknown(),
 				},
@@ -357,11 +370,27 @@ func (r *DatasetResource) Create(ctx context.Context, req resource.CreateRequest
 	}
 
 	if !data.Quota.IsNull() && !data.Quota.IsUnknown() {
-		params["quota"] = data.Quota.ValueString()
+		quotaBytes, err := api.ParseSize(data.Quota.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid Quota Value",
+				fmt.Sprintf("Unable to parse quota %q: %s", data.Quota.ValueString(), err.Error()),
+			)
+			return
+		}
+		params["quota"] = quotaBytes
 	}
 
 	if !data.RefQuota.IsNull() && !data.RefQuota.IsUnknown() {
-		params["refquota"] = data.RefQuota.ValueString()
+		refquotaBytes, err := api.ParseSize(data.RefQuota.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid RefQuota Value",
+				fmt.Sprintf("Unable to parse refquota %q: %s", data.RefQuota.ValueString(), err.Error()),
+			)
+			return
+		}
+		params["refquota"] = refquotaBytes
 	}
 
 	if !data.Atime.IsNull() && !data.Atime.IsUnknown() {
@@ -502,11 +531,27 @@ func (r *DatasetResource) Update(ctx context.Context, req resource.UpdateRequest
 	}
 
 	if !data.Quota.Equal(state.Quota) && !data.Quota.IsNull() {
-		updateParams["quota"] = data.Quota.ValueString()
+		quotaBytes, err := api.ParseSize(data.Quota.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid Quota Value",
+				fmt.Sprintf("Unable to parse quota %q: %s", data.Quota.ValueString(), err.Error()),
+			)
+			return
+		}
+		updateParams["quota"] = quotaBytes
 	}
 
 	if !data.RefQuota.Equal(state.RefQuota) && !data.RefQuota.IsNull() {
-		updateParams["refquota"] = data.RefQuota.ValueString()
+		refquotaBytes, err := api.ParseSize(data.RefQuota.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Invalid RefQuota Value",
+				fmt.Sprintf("Unable to parse refquota %q: %s", data.RefQuota.ValueString(), err.Error()),
+			)
+			return
+		}
+		updateParams["refquota"] = refquotaBytes
 	}
 
 	if !data.Atime.Equal(state.Atime) && !data.Atime.IsNull() {

@@ -554,8 +554,8 @@ func TestDatasetResource_Create_Success(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -665,8 +665,8 @@ func TestDatasetResource_Create_WithParentName(t *testing.T) {
 					"name": "tank/data/apps",
 					"mountpoint": "/mnt/tank/data/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -884,8 +884,8 @@ func TestDatasetResource_Read_Success(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "10G"},
-					"refquota": {"value": "5G"},
+					"quota": {"value": "10G", "parsed": 10000000000},
+					"refquota": {"value": "5G", "parsed": 5000000000},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -933,11 +933,12 @@ func TestDatasetResource_Read_Success(t *testing.T) {
 	if model.Compression.ValueString() != "lz4" {
 		t.Errorf("expected Compression 'lz4', got %q", model.Compression.ValueString())
 	}
-	if model.Quota.ValueString() != "10G" {
-		t.Errorf("expected Quota '10G', got %q", model.Quota.ValueString())
+	// quota/refquota stored as bytes from API parsed field
+	if model.Quota.ValueString() != "10000000000" {
+		t.Errorf("expected Quota '10000000000', got %q", model.Quota.ValueString())
 	}
-	if model.RefQuota.ValueString() != "5G" {
-		t.Errorf("expected RefQuota '5G', got %q", model.RefQuota.ValueString())
+	if model.RefQuota.ValueString() != "5000000000" {
+		t.Errorf("expected RefQuota '5000000000', got %q", model.RefQuota.ValueString())
 	}
 	// Atime was set in state to "off", API returns "on", so it syncs to "on"
 	if model.Atime.ValueString() != "on" {
@@ -1032,8 +1033,8 @@ func TestDatasetResource_Update_Success(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "zstd"},
-					"quota": {"value": "10G"},
-					"refquota": {"value": "5G"},
+					"quota": {"value": "10G", "parsed": 10000000000},
+					"refquota": {"value": "5G", "parsed": 5000000000},
 					"atime": {"value": "off"}
 				}`), nil
 			},
@@ -1106,11 +1107,12 @@ func TestDatasetResource_Update_Success(t *testing.T) {
 		t.Fatalf("failed to get state: %v", diags)
 	}
 
-	if model.Quota.ValueString() != "10G" {
-		t.Errorf("expected Quota '10G', got %q", model.Quota.ValueString())
+	// quota/refquota stored as bytes from API parsed field
+	if model.Quota.ValueString() != "10000000000" {
+		t.Errorf("expected Quota '10000000000', got %q", model.Quota.ValueString())
 	}
-	if model.RefQuota.ValueString() != "5G" {
-		t.Errorf("expected RefQuota '5G', got %q", model.RefQuota.ValueString())
+	if model.RefQuota.ValueString() != "5000000000" {
+		t.Errorf("expected RefQuota '5000000000', got %q", model.RefQuota.ValueString())
 	}
 	if model.Atime.ValueString() != "off" {
 		t.Errorf("expected Atime 'off', got %q", model.Atime.ValueString())
@@ -1520,8 +1522,8 @@ func TestDatasetResource_Create_AllOptions(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "zstd"},
-					"quota": {"value": "10G"},
-					"refquota": {"value": "5G"},
+					"quota": {"value": "10G", "parsed": 10000000000},
+					"refquota": {"value": "5G", "parsed": 5000000000},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -1561,12 +1563,13 @@ func TestDatasetResource_Create_AllOptions(t *testing.T) {
 		t.Errorf("expected compression 'zstd', got %v", params["compression"])
 	}
 
-	if params["quota"] != "10G" {
-		t.Errorf("expected quota '10G', got %v", params["quota"])
+	// quota and refquota are sent as int64 bytes to the API (SI units: 1G = 1000^3)
+	if params["quota"] != int64(10000000000) {
+		t.Errorf("expected quota 10000000000 (10G in bytes), got %v", params["quota"])
 	}
 
-	if params["refquota"] != "5G" {
-		t.Errorf("expected refquota '5G', got %v", params["refquota"])
+	if params["refquota"] != int64(5000000000) {
+		t.Errorf("expected refquota 5000000000 (5G in bytes), got %v", params["refquota"])
 	}
 
 	if params["atime"] != "on" {
@@ -1584,8 +1587,8 @@ func TestDatasetResource_Read_WithParentName(t *testing.T) {
 					"name": "tank/data/apps",
 					"mountpoint": "/mnt/tank/data/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -1746,8 +1749,8 @@ func TestDatasetResource_Update_QuotaChange(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "10G"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "10G", "parsed": 10000000000},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "on"}
 				}`), nil
 			},
@@ -1796,8 +1799,9 @@ func TestDatasetResource_Update_QuotaChange(t *testing.T) {
 		t.Fatalf("expected update params to be map[string]any, got %T", params[1])
 	}
 
-	if updateParams["quota"] != "10G" {
-		t.Errorf("expected quota '10G', got %v", updateParams["quota"])
+	// quota is sent as int64 bytes to the API (SI units: 1G = 1000^3)
+	if updateParams["quota"] != int64(10000000000) {
+		t.Errorf("expected quota 10000000000 (10G in bytes), got %v", updateParams["quota"])
 	}
 }
 
@@ -1814,8 +1818,8 @@ func TestDatasetResource_Update_RefQuotaChange(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "5G"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "5G", "parsed": 5000000000},
 					"atime": {"value": "on"}
 				}`), nil
 			},
@@ -1860,8 +1864,9 @@ func TestDatasetResource_Update_RefQuotaChange(t *testing.T) {
 		t.Fatalf("expected update params to be map[string]any, got %T", params[1])
 	}
 
-	if updateParams["refquota"] != "5G" {
-		t.Errorf("expected refquota '5G', got %v", updateParams["refquota"])
+	// refquota is sent as int64 bytes to the API (SI units: 1G = 1000^3)
+	if updateParams["refquota"] != int64(5000000000) {
+		t.Errorf("expected refquota 5000000000 (5G in bytes), got %v", updateParams["refquota"])
 	}
 }
 
@@ -1878,8 +1883,8 @@ func TestDatasetResource_Update_AtimeChange(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "off"}
 				}`), nil
 			},
@@ -2252,8 +2257,8 @@ func TestDatasetResource_Read_PopulatesComputedAttributes(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "LZ4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "OFF"}
 				}]`), nil
 			},
@@ -2382,7 +2387,7 @@ func TestDatasetResource_Create_WithPermissions(t *testing.T) {
 					return json.RawMessage(`{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps"}`), nil
 				}
 				if method == "pool.dataset.query" {
-					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0"},"refquota":{"value":"0"},"atime":{"value":"off"}}]`), nil
+					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0","parsed":0},"refquota":{"value":"0","parsed":0},"atime":{"value":"off"}}]`), nil
 				}
 				return nil, nil
 			},
@@ -2451,7 +2456,7 @@ func TestDatasetResource_Create_NoPermissions(t *testing.T) {
 					return json.RawMessage(`{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps"}`), nil
 				}
 				if method == "pool.dataset.query" {
-					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0"},"refquota":{"value":"0"},"atime":{"value":"off"}}]`), nil
+					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0","parsed":0},"refquota":{"value":"0","parsed":0},"atime":{"value":"off"}}]`), nil
 				}
 				return nil, nil
 			},
@@ -2578,8 +2583,8 @@ func TestDatasetResource_Read_BothMountPathAndFullPath(t *testing.T) {
 					"name": "storage/apps",
 					"mountpoint": "/mnt/storage/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -2663,7 +2668,7 @@ func TestDatasetResource_Read_WithPermissions(t *testing.T) {
 		client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "pool.dataset.query" {
-					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0"},"refquota":{"value":"0"},"atime":{"value":"off"}}]`), nil
+					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0","parsed":0},"refquota":{"value":"0","parsed":0},"atime":{"value":"off"}}]`), nil
 				}
 				if method == "filesystem.stat" {
 					// Return mode 0755 (493 in decimal), uid 1000, gid 1000
@@ -2726,8 +2731,8 @@ func TestDatasetResource_Read_AfterImport_PopulatesPoolAndPath(t *testing.T) {
 					"name": "tank/data/apps",
 					"mountpoint": "/mnt/tank/data/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -2783,8 +2788,8 @@ func TestDatasetResource_Read_AfterImport_SimpleDataset(t *testing.T) {
 					"name": "tank/apps",
 					"mountpoint": "/mnt/tank/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -2840,8 +2845,8 @@ func TestDatasetResource_Read_DoesNotOverridePoolPathWhenSet(t *testing.T) {
 					"name": "tank/data/apps",
 					"mountpoint": "/mnt/tank/data/apps",
 					"compression": {"value": "lz4"},
-					"quota": {"value": "0"},
-					"refquota": {"value": "0"},
+					"quota": {"value": "0", "parsed": 0},
+					"refquota": {"value": "0", "parsed": 0},
 					"atime": {"value": "on"}
 				}]`), nil
 			},
@@ -2893,7 +2898,7 @@ func TestDatasetResource_Read_PermissionsStatError_ReturnsWarning(t *testing.T) 
 		client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "pool.dataset.query" {
-					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0"},"refquota":{"value":"0"},"atime":{"value":"off"}}]`), nil
+					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0","parsed":0},"refquota":{"value":"0","parsed":0},"atime":{"value":"off"}}]`), nil
 				}
 				if method == "filesystem.stat" {
 					return nil, errors.New("permission denied")
@@ -2963,7 +2968,7 @@ func TestDatasetResource_Read_PermissionsInvalidJSON_ReturnsWarning(t *testing.T
 		client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "pool.dataset.query" {
-					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0"},"refquota":{"value":"0"},"atime":{"value":"off"}}]`), nil
+					return json.RawMessage(`[{"id":"storage/apps","name":"storage/apps","mountpoint":"/mnt/storage/apps","compression":{"value":"lz4"},"quota":{"value":"0","parsed":0},"refquota":{"value":"0","parsed":0},"atime":{"value":"off"}}]`), nil
 				}
 				if method == "filesystem.stat" {
 					return json.RawMessage(`not valid json`), nil
@@ -3027,8 +3032,8 @@ func TestDatasetResource_Create_WithSnapshotId(t *testing.T) {
 						"name": "restored",
 						"mountpoint": "/mnt/tank/restored",
 						"compression": {"value": "lz4"},
-						"quota": {"value": "0"},
-						"refquota": {"value": "0"},
+						"quota": {"value": "0", "parsed": 0},
+						"refquota": {"value": "0", "parsed": 0},
 						"atime": {"value": "on"}
 					}]`), nil
 				}
