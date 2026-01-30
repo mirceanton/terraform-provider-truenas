@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"al.essio.dev/pkg/shellescape"
 	"github.com/deevus/terraform-provider-truenas/internal/api"
@@ -263,10 +264,27 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 }
 
 // CallAndWait executes a command and waits for job completion.
-// Uses midclt's -j flag to wait for long-running jobs.
+// On TrueNAS 25.x+, uses midclt's -j flag which relies on core.subscribe.
+// On TrueNAS 24.x, polls core.get_jobs since core.subscribe doesn't exist.
 // Note: The response is not parsed as it contains unparseable progress output.
 // Callers should query the resource state separately after this returns.
 func (c *SSHClient) CallAndWait(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	// Check TrueNAS version to determine job waiting strategy
+	version, err := c.GetVersion(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect TrueNAS version: %w", err)
+	}
+
+	// TrueNAS 25.x+ supports core.subscribe, so midclt -j works
+	// TrueNAS 24.x doesn't have core.subscribe, so we poll core.get_jobs
+	if version.AtLeast(25, 0) {
+		return c.callAndWaitWithFlag(ctx, method, params)
+	}
+	return c.callAndWaitWithPolling(ctx, method, params)
+}
+
+// callAndWaitWithFlag uses midclt's -j flag for job waiting (TrueNAS 25.x+).
+func (c *SSHClient) callAndWaitWithFlag(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	// Acquire session slot (blocks if at limit)
 	release := c.acquireSession()
 	defer release()
@@ -313,6 +331,104 @@ func (c *SSHClient) CallAndWait(ctx context.Context, method string, params any) 
 
 	// Success - return nil as callers should query state separately
 	return nil, nil
+}
+
+// callAndWaitWithPolling polls core.get_jobs for job completion (TrueNAS 24.x).
+// This is needed because TrueNAS 24.x doesn't have core.subscribe.
+func (c *SSHClient) callAndWaitWithPolling(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	// Call the method without -j to get the job ID
+	result, err := c.Call(ctx, method, params)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the job ID from the result
+	var jobID int64
+	if err := json.Unmarshal(result, &jobID); err != nil {
+		// If it's not a job ID, the method completed synchronously
+		return result, nil
+	}
+
+	// Poll core.get_jobs until the job completes
+	return c.pollJobCompletion(ctx, jobID)
+}
+
+// jobStatus represents a job from core.get_jobs.
+type jobStatus struct {
+	ID        int64           `json:"id"`
+	State     string          `json:"state"`
+	Result    json.RawMessage `json:"result"`
+	Error     *string         `json:"error"`
+	Exception *string         `json:"exception"`
+	ExcInfo   *struct {
+		Type   string `json:"type"`
+		Errno  *int   `json:"errno"`
+		Repr   string `json:"repr"`
+		Extra  any    `json:"extra"`
+	} `json:"exc_info"`
+}
+
+// pollJobCompletion polls core.get_jobs until the job reaches a terminal state.
+func (c *SSHClient) pollJobCompletion(ctx context.Context, jobID int64) (json.RawMessage, error) {
+	// Build the query filter for this job ID
+	filter := []any{[]any{"id", "=", jobID}}
+	options := map[string]any{"get": true}
+	params := []any{filter, options}
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
+		result, err := c.Call(ctx, "core.get_jobs", params)
+		if err != nil {
+			return nil, fmt.Errorf("failed to poll job %d: %w", jobID, err)
+		}
+
+		var job jobStatus
+		if err := json.Unmarshal(result, &job); err != nil {
+			return nil, fmt.Errorf("failed to parse job status: %w", err)
+		}
+
+		switch job.State {
+		case "SUCCESS":
+			// Job completed successfully
+			return nil, nil
+		case "FAILED", "ABORTED":
+			// Job failed - construct error from job info
+			errMsg := "job failed"
+			if job.Error != nil && *job.Error != "" {
+				errMsg = *job.Error
+			} else if job.Exception != nil && *job.Exception != "" {
+				errMsg = *job.Exception
+			}
+			tnErr := ParseTrueNASError(errMsg)
+			// Fetch app lifecycle log if applicable
+			EnrichAppLifecycleError(ctx, tnErr, func(ctx context.Context, path string) (string, error) {
+				output, err := c.runSudoOutput(ctx, "cat", path)
+				return string(output), err
+			})
+			return nil, tnErr
+		case "RUNNING", "WAITING":
+			// Job still in progress, wait before polling again
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(500 * time.Millisecond):
+				continue
+			}
+		default:
+			// Unknown state, treat as still running
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(500 * time.Millisecond):
+				continue
+			}
+		}
+	}
 }
 
 // Close closes the SSH connection.

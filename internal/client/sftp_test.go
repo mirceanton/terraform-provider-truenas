@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/deevus/terraform-provider-truenas/internal/api"
 )
 
 // mockSSHSession is a test double for sshSession interface
@@ -638,6 +640,10 @@ func TestSSHClient_Chown_Success(t *testing.T) {
 
 	client, _ := NewSSHClient(config)
 
+	// Pre-set version to 25.x for -j flag behavior
+	client.version = api.Version{Major: 25, Minor: 4, Raw: "TrueNAS-25.04"}
+	client.versionOnce.Do(func() {})
+
 	var capturedCmd string
 	mockSession := &mockSSHSession{
 		combinedOutputFunc: func(cmd string) ([]byte, error) {
@@ -677,6 +683,10 @@ func TestSSHClient_Chown_PermissionDenied(t *testing.T) {
 	}
 
 	client, _ := NewSSHClient(config)
+
+	// Pre-set version to 25.x for -j flag behavior
+	client.version = api.Version{Major: 25, Minor: 4, Raw: "TrueNAS-25.04"}
+	client.versionOnce.Do(func() {})
 
 	mockSession := &mockSSHSession{
 		combinedOutputFunc: func(cmd string) ([]byte, error) {

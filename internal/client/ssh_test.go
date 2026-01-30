@@ -5,11 +5,14 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/deevus/terraform-provider-truenas/internal/api"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -678,7 +681,7 @@ func TestSSHClient_Call_ShellEscaping(t *testing.T) {
 	}
 }
 
-func TestSSHClient_CallAndWait(t *testing.T) {
+func TestSSHClient_CallAndWait_V25_UsesJobFlag(t *testing.T) {
 	config := &SSHConfig{
 		Host:               "truenas.local",
 		PrivateKey:         testPrivateKey,
@@ -687,9 +690,13 @@ func TestSSHClient_CallAndWait(t *testing.T) {
 
 	client, _ := NewSSHClient(config)
 
+	// Pre-set version to 25.x to use -j flag behavior
+	client.version = api.Version{Major: 25, Minor: 4, Raw: "TrueNAS-25.04"}
+	client.versionOnce.Do(func() {}) // Mark as done
+
 	mockSess := &mockSession{
 		combinedOutputFunc: func(cmd string) ([]byte, error) {
-			// CallAndWait uses -j flag for job waiting
+			// CallAndWait uses -j flag for job waiting on 25.x
 			expected := `sudo midclt call -j app.create '{"name":"test"}'`
 			if cmd != expected {
 				t.Errorf("expected command %q, got %q", expected, cmd)
@@ -715,6 +722,156 @@ func TestSSHClient_CallAndWait(t *testing.T) {
 	// CallAndWait returns nil on success - callers should query state separately
 	if result != nil {
 		t.Errorf("expected nil result, got %s", result)
+	}
+}
+
+func TestSSHClient_CallAndWait_V24_UsesPolling(t *testing.T) {
+	config := &SSHConfig{
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	// Pre-set version to 24.x to use polling behavior
+	client.version = api.Version{Major: 24, Minor: 10, Raw: "TrueNAS-24.10"}
+	client.versionOnce.Do(func() {}) // Mark as done
+
+	callCount := 0
+	mockSess := &mockSession{
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
+			callCount++
+			switch callCount {
+			case 1:
+				// First call: the actual method (without -j), returns job ID
+				expected := `sudo midclt call app.create '{"name":"test"}'`
+				if cmd != expected {
+					t.Errorf("expected command %q, got %q", expected, cmd)
+				}
+				return []byte("12345"), nil // Job ID
+			case 2:
+				// Second call: poll core.get_jobs, job still running
+				if !strings.Contains(cmd, "core.get_jobs") {
+					t.Errorf("expected core.get_jobs poll, got %q", cmd)
+				}
+				return []byte(`{"id":12345,"state":"RUNNING","result":null,"error":null}`), nil
+			case 3:
+				// Third call: poll core.get_jobs, job completed
+				return []byte(`{"id":12345,"state":"SUCCESS","result":null,"error":null}`), nil
+			default:
+				t.Errorf("unexpected call count: %d", callCount)
+				return nil, fmt.Errorf("unexpected call")
+			}
+		},
+	}
+
+	mockClient := &mockSSHClient{
+		newSessionFunc: func() (sshSession, error) {
+			return mockSess, nil
+		},
+	}
+
+	client.clientWrapper = mockClient
+
+	result, err := client.CallAndWait(context.Background(), "app.create", map[string]string{"name": "test"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if result != nil {
+		t.Errorf("expected nil result, got %s", result)
+	}
+
+	if callCount != 3 {
+		t.Errorf("expected 3 calls (method + 2 polls), got %d", callCount)
+	}
+}
+
+func TestSSHClient_CallAndWait_V24_JobFailure(t *testing.T) {
+	config := &SSHConfig{
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	// Pre-set version to 24.x
+	client.version = api.Version{Major: 24, Minor: 10, Raw: "TrueNAS-24.10"}
+	client.versionOnce.Do(func() {})
+
+	callCount := 0
+	mockSess := &mockSession{
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
+			callCount++
+			switch callCount {
+			case 1:
+				// Method call returns job ID
+				return []byte("12345"), nil
+			case 2:
+				// Poll returns failed job
+				return []byte(`{"id":12345,"state":"FAILED","result":null,"error":"Something went wrong","exception":"Error: Something went wrong"}`), nil
+			default:
+				return nil, fmt.Errorf("unexpected call")
+			}
+		},
+	}
+
+	mockClient := &mockSSHClient{
+		newSessionFunc: func() (sshSession, error) {
+			return mockSess, nil
+		},
+	}
+
+	client.clientWrapper = mockClient
+
+	_, err := client.CallAndWait(context.Background(), "app.create", map[string]string{"name": "test"})
+	if err == nil {
+		t.Fatal("expected error for failed job, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "Something went wrong") {
+		t.Errorf("expected error to contain 'Something went wrong', got %q", err.Error())
+	}
+}
+
+func TestSSHClient_CallAndWait_V24_SynchronousMethod(t *testing.T) {
+	config := &SSHConfig{
+		Host:               "truenas.local",
+		PrivateKey:         testPrivateKey,
+		HostKeyFingerprint: testHostKeyFingerprint,
+	}
+
+	client, _ := NewSSHClient(config)
+
+	// Pre-set version to 24.x
+	client.version = api.Version{Major: 24, Minor: 10, Raw: "TrueNAS-24.10"}
+	client.versionOnce.Do(func() {})
+
+	mockSess := &mockSession{
+		combinedOutputFunc: func(cmd string) ([]byte, error) {
+			// Method returns a non-integer result (not a job ID)
+			return []byte(`{"foo":"bar"}`), nil
+		},
+	}
+
+	mockClient := &mockSSHClient{
+		newSessionFunc: func() (sshSession, error) {
+			return mockSess, nil
+		},
+	}
+
+	client.clientWrapper = mockClient
+
+	result, err := client.CallAndWait(context.Background(), "some.sync.method", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// For synchronous methods, returns the result directly
+	if string(result) != `{"foo":"bar"}` {
+		t.Errorf("expected result %q, got %q", `{"foo":"bar"}`, string(result))
 	}
 }
 
@@ -874,6 +1031,10 @@ func TestSSHClient_CallAndWait_PositionalArgs(t *testing.T) {
 	}
 
 	client, _ := NewSSHClient(config)
+
+	// Pre-set version to 25.x to use -j flag behavior
+	client.version = api.Version{Major: 25, Minor: 4, Raw: "TrueNAS-25.04"}
+	client.versionOnce.Do(func() {}) // Mark as done
 
 	mockSess := &mockSession{
 		combinedOutputFunc: func(cmd string) ([]byte, error) {
@@ -1084,7 +1245,9 @@ func TestSSHClient_CallAndWait_RespectsSemaphore(t *testing.T) {
 		config:        &SSHConfig{Host: "test", PrivateKey: testPrivateKey, HostKeyFingerprint: testHostKeyFingerprint},
 		clientWrapper: mockClient,
 		sessionSem:    make(chan struct{}, 2),
+		version:       api.Version{Major: 25, Minor: 4, Raw: "TrueNAS-25.04"},
 	}
+	client.versionOnce.Do(func() {}) // Mark version as cached
 
 	var wg sync.WaitGroup
 	for i := 0; i < 5; i++ {
