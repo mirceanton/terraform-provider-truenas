@@ -1,0 +1,66 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+### Basic Dataset
+
+{{ tffile "examples/resources/dataset/main.tf" }}
+
+### Dataset with Quota and Permissions
+
+```terraform
+resource "truenas_dataset" "apps" {
+  pool        = "tank"
+  path        = "apps"
+  compression = "lz4"
+  quota       = "100G"
+  mode        = "755"
+  uid         = 1000
+  gid         = 1000
+}
+```
+
+> **Note:** When `uid` or `gid` is specified, `mode` is required. TrueNAS requires explicit permissions when setting ownership.
+
+### Creating from Snapshot (Clone)
+
+```terraform
+resource "truenas_dataset" "restored" {
+  pool        = "tank"
+  path        = "apps/restored"
+  snapshot_id = truenas_snapshot.backup.id
+}
+```
+
+### Nested Dataset
+
+```terraform
+resource "truenas_dataset" "parent" {
+  pool = "tank"
+  path = "data"
+}
+
+resource "truenas_dataset" "child" {
+  parent = truenas_dataset.parent.id
+  path   = "apps"
+}
+```
+
+## Import
+
+Datasets can be imported using the full dataset path:
+
+```shell
+terraform import truenas_dataset.example tank/data/apps
+```
+
+{{ .SchemaMarkdown | trimspace }}

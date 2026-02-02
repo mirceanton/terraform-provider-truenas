@@ -1,0 +1,46 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+### Basic Snapshot
+
+{{ tffile "examples/resources/snapshot/main.tf" }}
+
+### Held Snapshot (Protected from Deletion)
+
+```terraform
+resource "truenas_snapshot" "protected" {
+  dataset_id = "tank/important"
+  name       = "pre-migration"
+  hold       = true
+}
+```
+
+### Recursive Snapshot
+
+```terraform
+resource "truenas_snapshot" "recursive" {
+  dataset_id = "tank/data"
+  name       = "full-backup"
+  recursive  = true
+}
+```
+
+## Import
+
+Snapshots can be imported using the snapshot ID (dataset@name):
+
+```shell
+terraform import truenas_snapshot.example tank/data@backup
+```
+
+{{ .SchemaMarkdown | trimspace }}

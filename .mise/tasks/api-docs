@@ -1,0 +1,36 @@
+#!/usr/bin/env -S usage bash
+#MISE description="Fetch TrueNAS API documentation"
+#MISE alias="ad"
+#USAGE flag "-r --raw" help="Output raw RST without formatting"
+#USAGE arg "[doc_name]" help="Doc name: index, jsonrpc, api_methods, api_events, jobs, query_methods" default="index"
+# Environment variables:
+#   TRUENAS_HOST    - TrueNAS host (e.g., solaris-1.outlook)
+#   TRUENAS_API_KEY - TrueNAS API key for authentication
+
+set -e
+
+if [[ -z "$TRUENAS_HOST" ]]; then
+  echo "Error: TRUENAS_HOST environment variable is required" >&2
+  exit 1
+fi
+
+if [[ -z "$TRUENAS_API_KEY" ]]; then
+  echo "Error: TRUENAS_API_KEY environment variable is required" >&2
+  exit 1
+fi
+
+doc_name="${usage_doc_name:-index}"
+
+# Ensure .rst.txt extension
+if [[ "$doc_name" != *.rst.txt ]]; then
+    doc_name="${doc_name%.rst}.rst.txt"
+fi
+
+if [[ "$usage_raw" == "true" ]]; then
+    curl -sk -H "Authorization: Bearer $TRUENAS_API_KEY" \
+        "https://$TRUENAS_HOST:8443/api/docs/current/_sources/$doc_name"
+else
+    curl -sk -H "Authorization: Bearer $TRUENAS_API_KEY" \
+        "https://$TRUENAS_HOST:8443/api/docs/current/_sources/$doc_name" | \
+        lynx -stdin -dump
+fi

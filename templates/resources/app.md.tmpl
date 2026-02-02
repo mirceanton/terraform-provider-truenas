@@ -1,0 +1,63 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+### Basic Custom App
+
+{{ tffile "examples/resources/app/main.tf" }}
+
+### App with File Dependencies
+
+Use `restart_triggers` to automatically restart the app when dependent files change:
+
+```terraform
+resource "truenas_host_path" "app_config" {
+  name = "my-app-config"
+  path = "/mnt/data/my-app"
+}
+
+resource "truenas_file" "config" {
+  host_path     = truenas_host_path.app_config.id
+  relative_path = "config.yaml"
+  content       = file("config.yaml")
+}
+
+resource "truenas_app" "example" {
+  name       = "my-app"
+  custom_app = true
+
+  compose_config = <<-EOF
+    services:
+      web:
+        image: nginx:latest
+        volumes:
+          - ${truenas_host_path.app_config.path}:/config:ro
+  EOF
+
+  # When the config file changes, restart the app to pick up the new config
+  restart_triggers = {
+    config_checksum = truenas_file.config.checksum
+  }
+}
+```
+
+> **Note:** Adding or removing `restart_triggers` does not trigger a restart. Only changes to existing trigger values cause the app to restart.
+
+## Import
+
+Apps can be imported using the app name:
+
+```shell
+terraform import truenas_app.example my-app
+```
+
+{{ .SchemaMarkdown | trimspace }}

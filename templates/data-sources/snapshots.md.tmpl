@@ -1,0 +1,36 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+### List all snapshots for a dataset
+
+{{ tffile "examples/data-sources/snapshots/main.tf" }}
+
+### Filter snapshots by name pattern
+
+```terraform
+data "truenas_snapshots" "daily" {
+  dataset_id   = "tank/data"
+  name_pattern = "daily-*"
+}
+```
+
+### Include child dataset snapshots
+
+```terraform
+data "truenas_snapshots" "all" {
+  dataset_id = "tank/data"
+  recursive  = true
+}
+```
+
+{{ .SchemaMarkdown | trimspace }}

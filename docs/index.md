@@ -11,8 +11,11 @@ The TrueNAS provider enables Terraform to manage TrueNAS SCALE and Community edi
 
 ## Features
 
-- **Data Sources**: Query pools and datasets
-- **Resources**: Manage datasets, host paths, and applications
+- **Storage**: Manage datasets, snapshots, and pools
+- **Applications**: Deploy custom Docker Compose apps
+- **Cloud Sync**: Configure cloud backup credentials and tasks
+- **Virtualization**: Manage Incus/LXC containers (TrueNAS 25.0+)
+- **Automation**: Create cron jobs and scheduled tasks
 
 ## Authentication
 
@@ -144,3 +147,7 @@ provider "truenas" {
   }
 }
 ```
+
+## Changelog
+
+See [CHANGELOG.md](https://github.com/deevus/terraform-provider-truenas/blob/main/CHANGELOG.md) for release history.

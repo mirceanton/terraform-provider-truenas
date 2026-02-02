@@ -5,7 +5,11 @@ This repository contains a Terraform provider for TrueNAS SCALE and Community ed
 ## Development workflow
 
 1. Development tasks are conducted using `mise`. Run `mise tasks` to see what tasks are available.
-2. To check a midclt method signature, run `mise run midclt-method {method}`
+2. To explore the TrueNAS API:
+   - `mr api-docs api_methods` - Browse available API methods
+   - `mr api-docs api_methods_{namespace}` - Browse methods in a namespace (e.g., `api_methods_cloudsync`)
+   - `mr api-docs {doc}` - View formatted documentation (uses lynx, add `-r` for raw RST)
+   - `mr midclt-method {method}` - Get JSON schema for a specific method (better for implementation)
 
 ### Design and implementation plans
 

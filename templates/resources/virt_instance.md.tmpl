@@ -1,0 +1,82 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+-> Requires TrueNAS 25.0 or later.
+
+## Example Usage
+
+### Basic Container
+
+{{ tffile "examples/resources/virt_instance/main.tf" }}
+
+### Container with Disk Mount
+
+```terraform
+resource "truenas_virt_instance" "with_storage" {
+  name          = "app-server"
+  image_name    = "ubuntu"
+  image_version = "24.04"
+  storage_pool  = "tank"
+  autostart     = true
+
+  disk {
+    name        = "data"
+    source      = "/mnt/tank/app-data"
+    destination = "/data"
+  }
+}
+```
+
+### Container with Port Forward
+
+```terraform
+resource "truenas_virt_instance" "web" {
+  name          = "web-server"
+  image_name    = "alpine"
+  image_version = "3.20"
+  storage_pool  = "tank"
+
+  proxy {
+    name         = "http"
+    source_proto = "TCP"
+    source_port  = 8080
+    dest_proto   = "TCP"
+    dest_port    = 80
+  }
+}
+```
+
+### Container with Custom Network
+
+```terraform
+resource "truenas_virt_instance" "bridged" {
+  name          = "network-test"
+  image_name    = "debian"
+  image_version = "12"
+  storage_pool  = "tank"
+
+  nic {
+    name     = "eth0"
+    nic_type = "BRIDGED"
+    parent   = "br0"
+  }
+}
+```
+
+## Import
+
+Containers can be imported using the container name:
+
+```shell
+terraform import truenas_virt_instance.example my-container
+```
+
+{{ .SchemaMarkdown | trimspace }}

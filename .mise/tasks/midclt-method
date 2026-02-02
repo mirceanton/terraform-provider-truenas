@@ -23,5 +23,5 @@ if [[ -n "$TRUENAS_KEY" ]]; then
   SSH_OPTS+=(-i "$TRUENAS_KEY")
 fi
 
-# Get all methods and filter to the one we want
-ssh "${SSH_OPTS[@]}" "${USER}@${TRUENAS_HOST}" midclt call core.get_methods | jq --arg method "$usage_method" '.[$method]'
+# Get all methods and filter to the one we want (jq runs on server to minimize data transfer)
+ssh "${SSH_OPTS[@]}" "${USER}@${TRUENAS_HOST}" "midclt call core.get_methods | jq --arg method '$usage_method' '.[\$method]'"

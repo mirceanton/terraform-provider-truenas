@@ -10,5 +10,5 @@ resource "truenas_dataset" "app_data" {
 # Create a nested dataset using parent reference
 resource "truenas_dataset" "app_logs" {
   parent = truenas_dataset.app_data.id
-  name   = "logs"
+  path   = "logs"
 }

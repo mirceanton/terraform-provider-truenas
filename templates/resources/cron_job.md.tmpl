@@ -1,0 +1,46 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+### Basic Cron Job
+
+{{ tffile "examples/resources/cron_job/main.tf" }}
+
+### Cron Job with Output Capture
+
+```terraform
+resource "truenas_cron_job" "backup_report" {
+  user        = "root"
+  command     = "/usr/local/bin/backup-report.sh"
+  description = "Generate daily backup report"
+
+  schedule {
+    minute = "0"
+    hour   = "8"
+  }
+
+  capture_stdout = true
+  capture_stderr = true
+}
+```
+
+> **Note:** When `capture_stdout` or `capture_stderr` is `true`, output is mailed to the user account.
+
+## Import
+
+Cron jobs can be imported using the numeric ID:
+
+```shell
+terraform import truenas_cron_job.example 1
+```
+
+{{ .SchemaMarkdown | trimspace }}

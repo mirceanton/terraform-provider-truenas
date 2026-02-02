@@ -1,0 +1,82 @@
+---
+page_title: "{{.Name}} {{.Type}} - {{.ProviderName}}"
+subcategory: ""
+description: |-
+{{ .Description | plainmarkdown | trimspace | prefixlines "  " }}
+---
+
+# {{.Name}} ({{.Type}})
+
+{{ .Description | trimspace }}
+
+## Example Usage
+
+### Basic S3 Backup
+
+{{ tffile "examples/resources/cloudsync_task/main.tf" }}
+
+### Encrypted Backup with Bandwidth Limit
+
+```terraform
+resource "truenas_cloudsync_task" "encrypted_backup" {
+  description   = "Encrypted backup to B2"
+  path          = "/mnt/tank/sensitive"
+  credentials   = truenas_cloudsync_credentials.b2.id
+  direction     = "push"
+  transfer_mode = "copy"
+
+  schedule {
+    minute = "0"
+    hour   = "3"
+  }
+
+  b2 {
+    bucket = "my-b2-bucket"
+    folder = "encrypted-backup"
+  }
+
+  encryption {
+    password = var.encryption_password
+    salt     = var.encryption_salt
+  }
+
+  bwlimit   = "10M"
+  transfers = 4
+  exclude   = ["*.tmp", "*.log"]
+}
+```
+
+### Selective Backup with Include Patterns
+
+```terraform
+resource "truenas_cloudsync_task" "photos_only" {
+  description   = "Backup photos only"
+  path          = "/mnt/tank/media"
+  credentials   = truenas_cloudsync_credentials.s3.id
+  direction     = "push"
+  transfer_mode = "sync"
+
+  schedule {
+    minute = "30"
+    hour   = "1"
+  }
+
+  s3 {
+    bucket = "my-photos-bucket"
+    folder = "backup"
+  }
+
+  include = ["/photos/**", "*.jpg", "*.png", "*.raw"]
+  exclude = ["**/thumbnails/**"]
+}
+```
+
+## Import
+
+Tasks can be imported using the numeric ID:
+
+```shell
+terraform import truenas_cloudsync_task.example 1
+```
+
+{{ .SchemaMarkdown | trimspace }}

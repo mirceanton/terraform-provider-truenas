@@ -27,3 +27,4 @@ terraform-provider-truenas_v*
 .worktrees/
 mise.local.toml
 coverage*.out
+fnox.local.toml
