@@ -3511,3 +3511,1072 @@ func TestWebSocketClient_CallAndWait_AbortedJob_WithEnrichment(t *testing.T) {
 		t.Errorf("expected clean error output, got %q", errStr)
 	}
 }
+
+func TestNotifyJobSubs(t *testing.T) {
+	t.Run("notifies all subscribers", func(t *testing.T) {
+		jobSubs := map[int64]chan<- JobEvent{}
+		ch1 := make(chan JobEvent, 1)
+		ch2 := make(chan JobEvent, 1)
+		jobSubs[100] = ch1
+		jobSubs[200] = ch2
+
+		notifyJobSubs(jobSubs, JobEventDisconnected)
+
+		select {
+		case event := <-ch1:
+			if event.ID != 100 || event.State != JobEventDisconnected {
+				t.Errorf("wrong event for job 100: %+v", event)
+			}
+		default:
+			t.Error("ch1 should have received event")
+		}
+
+		select {
+		case event := <-ch2:
+			if event.ID != 200 || event.State != JobEventDisconnected {
+				t.Errorf("wrong event for job 200: %+v", event)
+			}
+		default:
+			t.Error("ch2 should have received event")
+		}
+	})
+
+	t.Run("non-blocking when channel full", func(t *testing.T) {
+		jobSubs := map[int64]chan<- JobEvent{}
+		ch := make(chan JobEvent) // unbuffered - will block
+
+		jobSubs[100] = ch
+
+		// Should not block - uses non-blocking send
+		done := make(chan bool)
+		go func() {
+			notifyJobSubs(jobSubs, JobEventDisconnected)
+			done <- true
+		}()
+
+		select {
+		case <-done:
+			// Success - didn't block
+		case <-time.After(100 * time.Millisecond):
+			t.Error("notifyJobSubs blocked on full channel")
+		}
+	})
+}
+
+func TestWriterLoop_NotifiesSubscribersOnDisconnect(t *testing.T) {
+	// This test verifies that when the WebSocket connection is closed during
+	// an active job, the job subscriber receives a DISCONNECTED event.
+
+	var writeMu sync.Mutex
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+
+			var req JSONRPCRequest
+			json.Unmarshal(msg, &req)
+
+			switch req.Method {
+			case "auth.login_ex":
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`{"response_type":"SUCCESS"}`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+			case "core.subscribe":
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`null`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+			case "test.job":
+				// Return job ID
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`123`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+				// Close connection to simulate disconnect
+				conn.Close()
+				return
+
+			case "core.get_jobs":
+				// After reconnect, return empty list (job no longer exists)
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`[]`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+			}
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	host := strings.TrimPrefix(wsURL, "ws://")
+
+	mock := &MockClient{
+		VersionVal:  api.Version{Major: 25, Minor: 0},
+		ConnectFunc: func(ctx context.Context) error { return nil },
+	}
+
+	config := WebSocketConfig{
+		Host:           strings.Split(host, ":")[0],
+		Port:           mustParsePort(strings.Split(host, ":")[1]),
+		Username:       "root",
+		APIKey:         "test-key",
+		Fallback:       mock,
+		ConnectTimeout: 5 * time.Second,
+		MaxRetries:     3, // Allow retries for reconnection
+	}
+
+	client, err := NewWebSocketClient(config)
+	if err != nil {
+		t.Fatalf("NewWebSocketClient() error = %v", err)
+	}
+	client.testInsecure = true
+	defer client.Close()
+
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	// Start CallAndWait in goroutine
+	resultCh := make(chan error, 1)
+	go func() {
+		_, err := client.CallAndWait(ctx, "test.job", nil)
+		resultCh <- err
+	}()
+
+	// Wait for error (should not hang forever)
+	select {
+	case err := <-resultCh:
+		if err == nil {
+			t.Error("expected error from disconnect")
+		}
+		// Success - got error instead of hanging
+	case <-time.After(5 * time.Second):
+		t.Fatal("CallAndWait hung after disconnect - jobSubs not notified")
+	}
+}
+
+func TestWriterLoop_SendsDisconnectedEventToJobSubscriber(t *testing.T) {
+	// This test directly verifies that the writerLoop sends DISCONNECTED events
+	// to job subscribers when the connection is closed.
+	var writeMu sync.Mutex
+	jobStarted := make(chan struct{})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+
+			var req JSONRPCRequest
+			json.Unmarshal(msg, &req)
+
+			switch req.Method {
+			case "auth.login_ex":
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`{"response_type":"SUCCESS"}`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+			case "core.subscribe":
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`null`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+			case "start.job":
+				// Return job ID
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`555`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+				// Signal that job started, wait a moment, then close connection
+				close(jobStarted)
+				time.Sleep(50 * time.Millisecond)
+				conn.Close()
+				return
+			}
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	host := strings.TrimPrefix(wsURL, "ws://")
+
+	mock := &MockClient{
+		VersionVal:  api.Version{Major: 25, Minor: 0},
+		ConnectFunc: func(ctx context.Context) error { return nil },
+	}
+
+	config := WebSocketConfig{
+		Host:           strings.Split(host, ":")[0],
+		Port:           mustParsePort(strings.Split(host, ":")[1]),
+		Username:       "root",
+		APIKey:         "test-key",
+		Fallback:       mock,
+		ConnectTimeout: 5 * time.Second,
+		MaxRetries:     0,
+	}
+
+	client, err := NewWebSocketClient(config)
+	if err != nil {
+		t.Fatalf("NewWebSocketClient() error = %v", err)
+	}
+	client.testInsecure = true
+	defer client.Close()
+
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	// Start a job (get the job ID)
+	result, err := client.Call(ctx, "start.job", nil)
+	if err != nil {
+		t.Fatalf("Call() error = %v", err)
+	}
+
+	var jobID int64
+	if err := json.Unmarshal(result, &jobID); err != nil {
+		t.Fatalf("Unmarshal job ID error = %v", err)
+	}
+
+	// Subscribe to job events
+	eventChan := make(chan JobEvent, 10)
+	client.subscribeJob(ctx, jobID, eventChan)
+
+	// Wait for disconnect event
+	select {
+	case event := <-eventChan:
+		if event.State != JobEventDisconnected {
+			t.Errorf("expected DISCONNECTED event, got %q", event.State)
+		}
+		if event.ID != jobID {
+			t.Errorf("event ID = %d, want %d", event.ID, jobID)
+		}
+		// Success - received DISCONNECTED event
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for DISCONNECTED event")
+	}
+}
+
+func TestWriterLoop_NotifiesSubscribersOnReconnect(t *testing.T) {
+	// This test verifies that when the WebSocket connection is re-established
+	// after a disconnect, job subscribers receive a RECONNECTED event.
+
+	var writeMu sync.Mutex
+	connectionCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		connectionCount++
+		currentConnection := connectionCount
+
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+
+			var req JSONRPCRequest
+			json.Unmarshal(msg, &req)
+
+			switch req.Method {
+			case "auth.login_ex":
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`{"response_type":"SUCCESS"}`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+			case "core.subscribe":
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`null`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+			case "test.job":
+				if currentConnection == 1 {
+					// First connection: start job then disconnect
+					writeMu.Lock()
+					conn.WriteJSON(JSONRPCResponse{
+						JSONRPC: "2.0",
+						Result:  json.RawMessage(`123`),
+						ID:      req.ID,
+					})
+					writeMu.Unlock()
+
+					// Close to simulate disconnect
+					time.Sleep(50 * time.Millisecond)
+					conn.Close()
+					return
+				}
+
+			case "core.get_jobs":
+				// Second connection: handle poll and return success
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`[{"id": 123, "state": "SUCCESS", "result": {"done": true}}]`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+			}
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	host := strings.TrimPrefix(wsURL, "ws://")
+
+	mock := &MockClient{
+		VersionVal:  api.Version{Major: 25, Minor: 0},
+		ConnectFunc: func(ctx context.Context) error { return nil },
+	}
+
+	config := WebSocketConfig{
+		Host:           strings.Split(host, ":")[0],
+		Port:           mustParsePort(strings.Split(host, ":")[1]),
+		Username:       "root",
+		APIKey:         "test-key",
+		Fallback:       mock,
+		ConnectTimeout: 5 * time.Second,
+		MaxRetries:     3, // Allow retries for reconnection
+	}
+
+	client, err := NewWebSocketClient(config)
+	if err != nil {
+		t.Fatalf("NewWebSocketClient() error = %v", err)
+	}
+	client.testInsecure = true
+	defer client.Close()
+
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	result, err := client.CallAndWait(ctx, "test.job", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var parsed map[string]bool
+	json.Unmarshal(result, &parsed)
+	if !parsed["done"] {
+		t.Errorf("expected done=true, got %s", result)
+	}
+}
+
+func TestWriterLoop_SendsReconnectedEventToJobSubscriber(t *testing.T) {
+	// This test directly verifies that the writerLoop sends RECONNECTED events
+	// to job subscribers when the connection is re-established after a disconnect.
+	var writeMu sync.Mutex
+	connectionCount := 0
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		connectionCount++
+		currentConnection := connectionCount
+
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+
+			var req JSONRPCRequest
+			json.Unmarshal(msg, &req)
+
+			switch req.Method {
+			case "auth.login_ex":
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`{"response_type":"SUCCESS"}`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+			case "core.subscribe":
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`null`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+			case "start.job":
+				// Return job ID
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`555`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+
+				if currentConnection == 1 {
+					// First connection: close after starting job
+					time.Sleep(50 * time.Millisecond)
+					conn.Close()
+					return
+				}
+
+			case "trigger.reconnect":
+				// This is just a dummy call to trigger the lazy reconnect
+				writeMu.Lock()
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`"ok"`),
+					ID:      req.ID,
+				})
+				writeMu.Unlock()
+			}
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	host := strings.TrimPrefix(wsURL, "ws://")
+
+	mock := &MockClient{
+		VersionVal:  api.Version{Major: 25, Minor: 0},
+		ConnectFunc: func(ctx context.Context) error { return nil },
+	}
+
+	config := WebSocketConfig{
+		Host:           strings.Split(host, ":")[0],
+		Port:           mustParsePort(strings.Split(host, ":")[1]),
+		Username:       "root",
+		APIKey:         "test-key",
+		Fallback:       mock,
+		ConnectTimeout: 5 * time.Second,
+		MaxRetries:     0,
+	}
+
+	client, err := NewWebSocketClient(config)
+	if err != nil {
+		t.Fatalf("NewWebSocketClient() error = %v", err)
+	}
+	client.testInsecure = true
+	defer client.Close()
+
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	// Start a job (get the job ID)
+	result, err := client.Call(ctx, "start.job", nil)
+	if err != nil {
+		t.Fatalf("Call() error = %v", err)
+	}
+
+	var jobID int64
+	if err := json.Unmarshal(result, &jobID); err != nil {
+		t.Fatalf("Unmarshal job ID error = %v", err)
+	}
+
+	// Subscribe to job events
+	eventChan := make(chan JobEvent, 10)
+	client.subscribeJob(ctx, jobID, eventChan)
+
+	// Wait for disconnect event first
+	select {
+	case event := <-eventChan:
+		if event.State != JobEventDisconnected {
+			t.Errorf("expected DISCONNECTED event first, got %q", event.State)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for DISCONNECTED event")
+	}
+
+	// Now trigger a reconnect by making another call
+	_, err = client.Call(ctx, "trigger.reconnect", nil)
+	if err != nil {
+		t.Fatalf("trigger.reconnect failed: %v", err)
+	}
+
+	// Wait for reconnect event
+	select {
+	case event := <-eventChan:
+		if event.State != JobEventReconnected {
+			t.Errorf("expected RECONNECTED event, got %q", event.State)
+		}
+		if event.ID != jobID {
+			t.Errorf("event ID = %d, want %d", event.ID, jobID)
+		}
+		// Success - received RECONNECTED event
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for RECONNECTED event")
+	}
+}
+
+func TestPollJobOnce(t *testing.T) {
+	tests := []struct {
+		name           string
+		serverResponse string
+		wantResult     bool
+		wantTerminal   bool
+		wantErr        bool
+	}{
+		{
+			name:           "job success",
+			serverResponse: `[{"id": 123, "state": "SUCCESS", "result": {"value": 42}}]`,
+			wantResult:     true,
+			wantTerminal:   true,
+			wantErr:        false,
+		},
+		{
+			name:           "job failed",
+			serverResponse: `[{"id": 123, "state": "FAILED", "error": "[EINVAL] Invalid input"}]`,
+			wantResult:     false,
+			wantTerminal:   true,
+			wantErr:        true,
+		},
+		{
+			name:           "job still running",
+			serverResponse: `[{"id": 123, "state": "RUNNING"}]`,
+			wantResult:     false,
+			wantTerminal:   false,
+			wantErr:        false,
+		},
+		{
+			name:           "job waiting",
+			serverResponse: `[{"id": 123, "state": "WAITING"}]`,
+			wantResult:     false,
+			wantTerminal:   false,
+			wantErr:        false,
+		},
+		{
+			name:           "job not found",
+			serverResponse: `[]`,
+			wantResult:     false,
+			wantTerminal:   false,
+			wantErr:        true,
+		},
+		{
+			name:           "unknown state continues without error",
+			serverResponse: `[{"id": 123, "state": "PENDING"}]`,
+			wantResult:     false,
+			wantTerminal:   false,
+			wantErr:        false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				upgrader := websocket.Upgrader{}
+				conn, err := upgrader.Upgrade(w, r, nil)
+				if err != nil {
+					return
+				}
+				defer conn.Close()
+
+				for {
+					_, msg, err := conn.ReadMessage()
+					if err != nil {
+						return
+					}
+
+					var req JSONRPCRequest
+					json.Unmarshal(msg, &req)
+
+					switch req.Method {
+					case "auth.login_ex":
+						conn.WriteJSON(JSONRPCResponse{
+							JSONRPC: "2.0",
+							Result:  json.RawMessage(`{"response_type":"SUCCESS"}`),
+							ID:      req.ID,
+						})
+					case "core.subscribe":
+						conn.WriteJSON(JSONRPCResponse{
+							JSONRPC: "2.0",
+							Result:  json.RawMessage(`null`),
+							ID:      req.ID,
+						})
+					case "core.get_jobs":
+						conn.WriteJSON(JSONRPCResponse{
+							JSONRPC: "2.0",
+							Result:  json.RawMessage(tt.serverResponse),
+							ID:      req.ID,
+						})
+					default:
+						conn.WriteJSON(JSONRPCResponse{
+							JSONRPC: "2.0",
+							Result:  json.RawMessage(`null`),
+							ID:      req.ID,
+						})
+					}
+				}
+			}))
+			defer server.Close()
+
+			wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+			host := strings.TrimPrefix(wsURL, "ws://")
+
+			mock := &MockClient{
+				VersionVal:  api.Version{Major: 25, Minor: 0},
+				ConnectFunc: func(ctx context.Context) error { return nil },
+			}
+
+			config := WebSocketConfig{
+				Host:           strings.Split(host, ":")[0],
+				Port:           mustParsePort(strings.Split(host, ":")[1]),
+				Username:       "root",
+				APIKey:         "test-key",
+				Fallback:       mock,
+				ConnectTimeout: 5 * time.Second,
+				MaxRetries:     1,
+			}
+
+			client, err := NewWebSocketClient(config)
+			if err != nil {
+				t.Fatalf("NewWebSocketClient() error = %v", err)
+			}
+			client.testInsecure = true
+			defer client.Close()
+
+			ctx := context.Background()
+			if err := client.Connect(ctx); err != nil {
+				t.Fatalf("Connect() error = %v", err)
+			}
+
+			result, terminal, err := client.pollJobOnce(ctx, 123)
+
+			if tt.wantErr && err == nil {
+				t.Error("expected error")
+			}
+			if !tt.wantErr && err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if terminal != tt.wantTerminal {
+				t.Errorf("terminal = %v, want %v", terminal, tt.wantTerminal)
+			}
+			if tt.wantResult && result == nil {
+				t.Error("expected result")
+			}
+		})
+	}
+}
+
+func TestPollJobOnce_ParseError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+
+			var req JSONRPCRequest
+			json.Unmarshal(msg, &req)
+
+			switch req.Method {
+			case "auth.login_ex":
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`{"response_type":"SUCCESS"}`),
+					ID:      req.ID,
+				})
+			case "core.subscribe":
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`null`),
+					ID:      req.ID,
+				})
+			case "core.get_jobs":
+				// Return invalid JSON that can't be parsed as []Job
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`{"not": "an array"}`),
+					ID:      req.ID,
+				})
+			default:
+				conn.WriteJSON(JSONRPCResponse{
+					JSONRPC: "2.0",
+					Result:  json.RawMessage(`null`),
+					ID:      req.ID,
+				})
+			}
+		}
+	}))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	host := strings.TrimPrefix(wsURL, "ws://")
+
+	mock := &MockClient{
+		VersionVal:  api.Version{Major: 25, Minor: 0},
+		ConnectFunc: func(ctx context.Context) error { return nil },
+	}
+
+	config := WebSocketConfig{
+		Host:           strings.Split(host, ":")[0],
+		Port:           mustParsePort(strings.Split(host, ":")[1]),
+		Username:       "root",
+		APIKey:         "test-key",
+		Fallback:       mock,
+		ConnectTimeout: 5 * time.Second,
+		MaxRetries:     1,
+	}
+
+	client, err := NewWebSocketClient(config)
+	if err != nil {
+		t.Fatalf("NewWebSocketClient() error = %v", err)
+	}
+	client.testInsecure = true
+	defer client.Close()
+
+	ctx := context.Background()
+	if err := client.Connect(ctx); err != nil {
+		t.Fatalf("Connect() error = %v", err)
+	}
+
+	_, _, err = client.pollJobOnce(ctx, 123)
+	if err == nil {
+		t.Error("expected parse error")
+	}
+	if !strings.Contains(err.Error(), "failed to parse job response") {
+		t.Errorf("expected 'failed to parse job response' error, got: %v", err)
+	}
+}
+
+func TestCallAndWait_TransientNetworkDisconnect(t *testing.T) {
+	t.Run("job completes during disconnect window", func(t *testing.T) {
+		// This test verifies that when a job completes while the WebSocket is
+		// disconnected, CallAndWait successfully recovers by polling after reconnect.
+		var writeMu sync.Mutex
+		connectionCount := 0
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			upgrader := websocket.Upgrader{}
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+
+			connectionCount++
+			currentConnection := connectionCount
+
+			for {
+				_, msg, err := conn.ReadMessage()
+				if err != nil {
+					return
+				}
+
+				var req JSONRPCRequest
+				json.Unmarshal(msg, &req)
+
+				switch req.Method {
+				case "auth.login_ex":
+					writeMu.Lock()
+					conn.WriteJSON(JSONRPCResponse{
+						JSONRPC: "2.0",
+						Result:  json.RawMessage(`{"response_type":"SUCCESS"}`),
+						ID:      req.ID,
+					})
+					writeMu.Unlock()
+
+				case "core.subscribe":
+					writeMu.Lock()
+					conn.WriteJSON(JSONRPCResponse{
+						JSONRPC: "2.0",
+						Result:  json.RawMessage(`null`),
+						ID:      req.ID,
+					})
+					writeMu.Unlock()
+
+				case "test.long_job":
+					if currentConnection == 1 {
+						// First connection: start job, send RUNNING, then disconnect
+						writeMu.Lock()
+						conn.WriteJSON(JSONRPCResponse{
+							JSONRPC: "2.0",
+							Result:  json.RawMessage(`456`),
+							ID:      req.ID,
+						})
+						writeMu.Unlock()
+
+						// Send RUNNING event
+						runningEvent := map[string]any{
+							"msg":    "method",
+							"method": "collection_update",
+							"params": map[string]any{
+								"msg":        "changed",
+								"collection": "core.get_jobs",
+								"id":         456,
+								"fields":     map[string]any{"state": "RUNNING"},
+							},
+						}
+						writeMu.Lock()
+						conn.WriteJSON(runningEvent)
+						writeMu.Unlock()
+
+						time.Sleep(50 * time.Millisecond)
+						conn.Close() // Disconnect while job is running
+						return
+					}
+
+				case "core.get_jobs":
+					// Second connection: job completed during disconnect
+					writeMu.Lock()
+					conn.WriteJSON(JSONRPCResponse{
+						JSONRPC: "2.0",
+						Result:  json.RawMessage(`[{"id": 456, "state": "SUCCESS", "result": {"completed": true}}]`),
+						ID:      req.ID,
+					})
+					writeMu.Unlock()
+				}
+			}
+		}))
+		defer server.Close()
+
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+		host := strings.TrimPrefix(wsURL, "ws://")
+
+		mock := &MockClient{
+			VersionVal:  api.Version{Major: 25, Minor: 0},
+			ConnectFunc: func(ctx context.Context) error { return nil },
+		}
+
+		config := WebSocketConfig{
+			Host:           strings.Split(host, ":")[0],
+			Port:           mustParsePort(strings.Split(host, ":")[1]),
+			Username:       "root",
+			APIKey:         "test-key",
+			Fallback:       mock,
+			ConnectTimeout: 5 * time.Second,
+			MaxRetries:     3,
+		}
+
+		client, err := NewWebSocketClient(config)
+		if err != nil {
+			t.Fatalf("NewWebSocketClient() error = %v", err)
+		}
+		client.testInsecure = true
+		defer client.Close()
+
+		ctx := context.Background()
+		if err := client.Connect(ctx); err != nil {
+			t.Fatalf("Connect() error = %v", err)
+		}
+
+		result, err := client.CallAndWait(ctx, "test.long_job", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var parsed map[string]bool
+		json.Unmarshal(result, &parsed)
+		if !parsed["completed"] {
+			t.Errorf("expected completed=true, got %s", result)
+		}
+	})
+
+	t.Run("job still running after reconnect", func(t *testing.T) {
+		// This test verifies that when a job is still running after reconnect,
+		// CallAndWait continues to wait for the completion event.
+		var writeMu sync.Mutex
+		connectionCount := 0
+
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			upgrader := websocket.Upgrader{}
+			conn, err := upgrader.Upgrade(w, r, nil)
+			if err != nil {
+				return
+			}
+			defer conn.Close()
+
+			connectionCount++
+			currentConnection := connectionCount
+
+			for {
+				_, msg, err := conn.ReadMessage()
+				if err != nil {
+					return
+				}
+
+				var req JSONRPCRequest
+				json.Unmarshal(msg, &req)
+
+				switch req.Method {
+				case "auth.login_ex":
+					writeMu.Lock()
+					conn.WriteJSON(JSONRPCResponse{
+						JSONRPC: "2.0",
+						Result:  json.RawMessage(`{"response_type":"SUCCESS"}`),
+						ID:      req.ID,
+					})
+					writeMu.Unlock()
+
+				case "core.subscribe":
+					writeMu.Lock()
+					conn.WriteJSON(JSONRPCResponse{
+						JSONRPC: "2.0",
+						Result:  json.RawMessage(`null`),
+						ID:      req.ID,
+					})
+					writeMu.Unlock()
+
+				case "test.job":
+					if currentConnection == 1 {
+						// First connection: start job then disconnect
+						writeMu.Lock()
+						conn.WriteJSON(JSONRPCResponse{
+							JSONRPC: "2.0",
+							Result:  json.RawMessage(`789`),
+							ID:      req.ID,
+						})
+						writeMu.Unlock()
+						time.Sleep(50 * time.Millisecond)
+						conn.Close()
+						return
+					}
+
+				case "core.get_jobs":
+					// Second connection: poll shows still running
+					writeMu.Lock()
+					conn.WriteJSON(JSONRPCResponse{
+						JSONRPC: "2.0",
+						Result:  json.RawMessage(`[{"id": 789, "state": "RUNNING"}]`),
+						ID:      req.ID,
+					})
+					writeMu.Unlock()
+
+					// Then send completion event
+					time.Sleep(50 * time.Millisecond)
+					successEvent := map[string]any{
+						"msg":    "method",
+						"method": "collection_update",
+						"params": map[string]any{
+							"msg":        "changed",
+							"collection": "core.get_jobs",
+							"id":         789,
+							"fields": map[string]any{
+								"state":  "SUCCESS",
+								"result": map[string]any{"finally": "done"},
+							},
+						},
+					}
+					writeMu.Lock()
+					conn.WriteJSON(successEvent)
+					writeMu.Unlock()
+				}
+			}
+		}))
+		defer server.Close()
+
+		wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+		host := strings.TrimPrefix(wsURL, "ws://")
+
+		mock := &MockClient{
+			VersionVal:  api.Version{Major: 25, Minor: 0},
+			ConnectFunc: func(ctx context.Context) error { return nil },
+		}
+
+		config := WebSocketConfig{
+			Host:           strings.Split(host, ":")[0],
+			Port:           mustParsePort(strings.Split(host, ":")[1]),
+			Username:       "root",
+			APIKey:         "test-key",
+			Fallback:       mock,
+			ConnectTimeout: 5 * time.Second,
+			MaxRetries:     3,
+		}
+
+		client, err := NewWebSocketClient(config)
+		if err != nil {
+			t.Fatalf("NewWebSocketClient() error = %v", err)
+		}
+		client.testInsecure = true
+		defer client.Close()
+
+		ctx := context.Background()
+		if err := client.Connect(ctx); err != nil {
+			t.Fatalf("Connect() error = %v", err)
+		}
+
+		result, err := client.CallAndWait(ctx, "test.job", nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var parsed map[string]string
+		json.Unmarshal(result, &parsed)
+		if parsed["finally"] != "done" {
+			t.Errorf("expected finally=done, got %s", result)
+		}
+	})
+}

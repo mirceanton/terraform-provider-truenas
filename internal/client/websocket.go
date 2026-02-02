@@ -125,12 +125,23 @@ func (b *jobEventBuffer) getByJobID(jobID int64) *JobEvent {
 }
 
 // JobEvent represents a job progress event from TrueNAS.
+// State can be:
+//   - "RUNNING", "WAITING" - Job in progress (from TrueNAS)
+//   - "SUCCESS", "FAILED", "ABORTED" - Job terminal states (from TrueNAS)
+//   - "DISCONNECTED" - Synthetic: WebSocket connection lost
+//   - "RECONNECTED" - Synthetic: WebSocket connection restored
 type JobEvent struct {
 	ID     int64           `json:"id"`
 	State  string          `json:"state"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Error  string          `json:"error,omitempty"`
 }
+
+// Synthetic job event states (not from TrueNAS)
+const (
+	JobEventDisconnected = "DISCONNECTED" // WebSocket connection lost
+	JobEventReconnected  = "RECONNECTED"  // WebSocket connection restored
+)
 
 // WebSocketClient implements Client using channels instead of mutexes.
 type WebSocketClient struct {
@@ -198,6 +209,7 @@ func (c *WebSocketClient) writerLoop() {
 	jobSubs := make(map[int64]chan<- JobEvent)
 	eventBuffer := &jobEventBuffer{}
 	var nextID int64
+	var notifiedDisconnect bool // Track if we've notified subscribers of disconnect
 
 	// Ping/pong state
 	var pingTicker *time.Ticker
@@ -209,6 +221,30 @@ func (c *WebSocketClient) writerLoop() {
 		pingTicker = time.NewTicker(c.config.PingInterval)
 		pingTickerChan = pingTicker.C
 		defer pingTicker.Stop()
+	}
+
+	// Helper to handle disconnect - notify subscribers once
+	handleDisconnect := func(err error) {
+		if conn != nil {
+			_ = conn.Close()
+			conn = nil
+		}
+		awaitingPong = false
+
+		// Fail all pending RPC requests
+		for id, req := range pending {
+			req.response <- wsResponse{err: err}
+			delete(pending, id)
+		}
+
+		// Notify job subscribers (only once per disconnect)
+		if !notifiedDisconnect {
+			if len(jobSubs) > 0 {
+				notifyJobSubs(jobSubs, JobEventDisconnected)
+			}
+			// Always set flag so new subscribers know we're disconnected
+			notifiedDisconnect = true
+		}
 	}
 
 	for {
@@ -223,6 +259,12 @@ func (c *WebSocketClient) writerLoop() {
 					continue
 				}
 				go c.readerLoop(conn)
+
+				// Notify job subscribers of reconnect (if any were waiting after disconnect)
+				if notifiedDisconnect && len(jobSubs) > 0 {
+					notifyJobSubs(jobSubs, JobEventReconnected)
+				}
+				notifiedDisconnect = false
 			}
 
 			// Build JSON-RPC request
@@ -238,9 +280,7 @@ func (c *WebSocketClient) writerLoop() {
 
 			if err := conn.WriteJSON(rpcReq); err != nil {
 				req.response <- wsResponse{err: err}
-				conn.Close()
-				conn = nil
-				awaitingPong = false
+				handleDisconnect(err)
 				continue
 			}
 
@@ -257,6 +297,9 @@ func (c *WebSocketClient) writerLoop() {
 					// Replay the terminal event we already received
 					sub.ch <- *buffered
 					delete(jobSubs, sub.jobID)
+				} else if notifiedDisconnect {
+					// Connection is currently disconnected - notify new subscriber
+					sub.ch <- JobEvent{ID: sub.jobID, State: JobEventDisconnected}
 				}
 			}
 
@@ -265,10 +308,8 @@ func (c *WebSocketClient) writerLoop() {
 				delete(pending, msg.ID)
 				if msg.Error != nil {
 					// Check for auth error - triggers reconnect
-					if isAuthenticationError(msg.Error) && conn != nil {
-						conn.Close()
-						conn = nil
-						awaitingPong = false
+					if isAuthenticationError(msg.Error) {
+						handleDisconnect(msg.Error)
 					}
 					req.response <- wsResponse{err: msg.Error}
 				} else {
@@ -281,20 +322,11 @@ func (c *WebSocketClient) writerLoop() {
 			c.handleJobEvent(msg, jobSubs, eventBuffer)
 
 		case err := <-c.disconnectChan:
-			if conn != nil {
-				conn.Close()
-				conn = nil
-			}
-			awaitingPong = false
-			// Fail all pending requests
-			for id, req := range pending {
-				req.response <- wsResponse{err: err}
-				delete(pending, id)
-			}
+			handleDisconnect(err)
 
 		case <-c.stopChan:
 			if conn != nil {
-				conn.Close()
+				_ = conn.Close()
 			}
 			// Fail remaining pending requests
 			for id, req := range pending {
@@ -307,12 +339,7 @@ func (c *WebSocketClient) writerLoop() {
 			if conn != nil && !awaitingPong {
 				err := conn.WriteControl(websocket.PingMessage, nil, time.Now().Add(c.config.PingTimeout))
 				if err != nil {
-					conn.Close()
-					conn = nil
-					for id, req := range pending {
-						req.response <- wsResponse{err: fmt.Errorf("ping failed: %w", err)}
-						delete(pending, id)
-					}
+					handleDisconnect(fmt.Errorf("ping failed: %w", err))
 					continue
 				}
 				awaitingPong = true
@@ -325,15 +352,7 @@ func (c *WebSocketClient) writerLoop() {
 
 		// Check for pong timeout
 		if awaitingPong && time.Now().After(pongDeadline) {
-			if conn != nil {
-				conn.Close()
-				conn = nil
-			}
-			for id, req := range pending {
-				req.response <- wsResponse{err: errors.New("pong timeout")}
-				delete(pending, id)
-			}
-			awaitingPong = false
+			handleDisconnect(errors.New("pong timeout"))
 		}
 	}
 }
@@ -408,6 +427,18 @@ func (c *WebSocketClient) routeJobEvent(jobID int64, state string, result json.R
 	}
 }
 
+// notifyJobSubs sends a synthetic event to all job subscribers.
+// Uses non-blocking send to avoid blocking the writer loop.
+func notifyJobSubs(jobSubs map[int64]chan<- JobEvent, state string) {
+	for jobID, ch := range jobSubs {
+		select {
+		case ch <- JobEvent{ID: jobID, State: state}:
+		default:
+			// Channel full, subscriber may be stuck - don't block writer loop
+		}
+	}
+}
+
 // wrapParams wraps params for JSON-RPC (single values become arrays).
 func (c *WebSocketClient) wrapParams(params any) any {
 	if params == nil {
@@ -451,7 +482,7 @@ func (c *WebSocketClient) connect(ctx context.Context) (*websocket.Conn, error) 
 
 	// Authenticate
 	if err := c.authenticate(ctx, conn); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 
@@ -460,7 +491,7 @@ func (c *WebSocketClient) connect(ctx context.Context) (*websocket.Conn, error) 
 	// and filter locally by job ID. This ensures events are flowing before any
 	// job is created, avoiding race conditions.
 	if err := c.subscribeJobEvents(conn); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 
@@ -644,20 +675,22 @@ func (c *WebSocketClient) CallAndWait(ctx context.Context, method string, params
 	}
 
 	// Subscribe to job events locally.
-	// Note: The collection subscription (core.subscribe("core.get_jobs")) happens
-	// at connection time, so events are already flowing. This just registers our
-	// interest in a specific job ID.
-	//
-	// RACE CONDITION HANDLING: If the job completed before we subscribed,
-	// writerLoop will replay the buffered terminal event to our channel
-	// immediately when we register. This eliminates the race window between
-	// the method returning and the subscription being registered.
 	eventChan := make(chan JobEvent, 10)
 	c.subscribeJob(ctx, jobID, eventChan)
 	defer c.unsubscribeJob(jobID)
 
+	// Track reconnect state for polling
+	var reconnectDeadline time.Time
+	const reconnectTimeout = 5 * time.Minute
+
 	// Wait for completion via events
 	for {
+		// Calculate timeout for select
+		var timeoutChan <-chan time.Time
+		if !reconnectDeadline.IsZero() {
+			timeoutChan = time.After(time.Until(reconnectDeadline))
+		}
+
 		select {
 		case event := <-eventChan:
 			switch event.State {
@@ -666,7 +699,6 @@ func (c *WebSocketClient) CallAndWait(ctx context.Context, method string, params
 			case "FAILED", "ABORTED":
 				if event.Error != "" {
 					tnErr := ParseTrueNASError(event.Error)
-					// Enrich with app lifecycle log if applicable (uses fallback SSH client with sudo)
 					EnrichAppLifecycleError(ctx, tnErr, func(ctx context.Context, path string) (string, error) {
 						content, err := c.ReadFile(ctx, path)
 						return string(content), err
@@ -674,11 +706,82 @@ func (c *WebSocketClient) CallAndWait(ctx context.Context, method string, params
 					return nil, tnErr
 				}
 				return nil, fmt.Errorf("job %d failed", jobID)
+			case JobEventDisconnected:
+				// Connection lost - set deadline for overall reconnect timeout.
+				// The poll will trigger a reconnection attempt in writerLoop.
+				if reconnectDeadline.IsZero() {
+					reconnectDeadline = time.Now().Add(reconnectTimeout)
+				}
+				// Attempt to poll job - this triggers reconnection attempt
+				pollResult, terminal, pollErr := c.pollJobOnce(ctx, jobID)
+				if pollErr != nil {
+					// Poll failed - could be retries exhausted or job gone
+					return nil, pollErr
+				}
+				if terminal {
+					return pollResult, nil
+				}
+				// Job still running, continue event-based waiting.
+				// Keep deadline active in case we get more disconnect events.
+				continue
+			case JobEventReconnected:
+				// Connection restored - poll to catch up on missed events and clear deadline
+				pollResult, terminal, pollErr := c.pollJobOnce(ctx, jobID)
+				if pollErr != nil {
+					return nil, pollErr
+				}
+				if terminal {
+					return pollResult, nil
+				}
+				// Job still running, connection restored - clear deadline and wait for events
+				reconnectDeadline = time.Time{}
+				continue
+			default:
+				// RUNNING, WAITING - continue
+				continue
 			}
-			// RUNNING, WAITING - continue
 		case <-ctx.Done():
 			return nil, ctx.Err()
+		case <-timeoutChan:
+			return nil, fmt.Errorf("reconnect timeout: connection not restored within %v", reconnectTimeout)
 		}
+	}
+}
+
+// pollJobOnce polls job status once after reconnect to catch up on missed events.
+// Returns (result, terminal, error) where terminal indicates if job reached a final state.
+func (c *WebSocketClient) pollJobOnce(ctx context.Context, jobID int64) (json.RawMessage, bool, error) {
+	filter := []any{[]any{"id", "=", jobID}}
+	result, err := c.Call(ctx, "core.get_jobs", []any{filter})
+	if err != nil {
+		return nil, false, err
+	}
+
+	var jobs []Job
+	if err := json.Unmarshal(result, &jobs); err != nil {
+		return nil, false, fmt.Errorf("failed to parse job response: %w", err)
+	}
+
+	if len(jobs) == 0 {
+		return nil, false, fmt.Errorf("job %d no longer exists after reconnect", jobID)
+	}
+
+	job := jobs[0]
+	switch job.State {
+	case JobStateSuccess:
+		return job.Result, true, nil
+	case JobStateFailed:
+		tnErr := ParseTrueNASError(job.Error)
+		tnErr.LogsExcerpt = job.LogsExcerpt
+		EnrichAppLifecycleError(ctx, tnErr, func(ctx context.Context, path string) (string, error) {
+			content, err := c.ReadFile(ctx, path)
+			return string(content), err
+		})
+		return nil, true, tnErr
+	case JobStateRunning, JobStateWaiting:
+		return nil, false, nil
+	default:
+		return nil, false, nil
 	}
 }
 

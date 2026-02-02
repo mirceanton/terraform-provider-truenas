@@ -102,10 +102,21 @@ func (c *WebSocketRetryClassifier) IsRetriable(err error) bool {
 		return true
 	}
 
-	// WebSocket close errors
+	// Network errors - transient connection failures
 	msg := err.Error()
-	if strings.Contains(msg, "websocket: close") {
-		return true
+	networkErrors := []string{
+		"connection reset by peer",
+		"broken pipe",
+		"connection refused",
+		"no route to host",
+		"network is unreachable",
+		"i/o timeout",
+		"websocket: close",
+	}
+	for _, pattern := range networkErrors {
+		if strings.Contains(msg, pattern) {
+			return true
+		}
 	}
 
 	return false

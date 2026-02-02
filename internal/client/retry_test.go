@@ -184,6 +184,37 @@ func TestWebSocketRetryClassifier_IsRetriable(t *testing.T) {
 			err:       errors.New("something went wrong"),
 			retriable: false,
 		},
+		// Network errors - transient connection failures
+		{
+			name:      "connection reset by peer",
+			err:       errors.New("read tcp 100.66.219.70:63734->192.168.1.127:8443: read: connection reset by peer"),
+			retriable: true,
+		},
+		{
+			name:      "broken pipe",
+			err:       errors.New("write tcp: broken pipe"),
+			retriable: true,
+		},
+		{
+			name:      "connection refused",
+			err:       errors.New("dial tcp: connection refused"),
+			retriable: true,
+		},
+		{
+			name:      "no route to host",
+			err:       errors.New("dial tcp: no route to host"),
+			retriable: true,
+		},
+		{
+			name:      "network is unreachable",
+			err:       errors.New("dial tcp: network is unreachable"),
+			retriable: true,
+		},
+		{
+			name:      "i/o timeout",
+			err:       errors.New("read tcp: i/o timeout"),
+			retriable: true,
+		},
 	}
 
 	for _, tt := range tests {

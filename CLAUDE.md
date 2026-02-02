@@ -26,3 +26,25 @@ When finishing a development branch:
 ## Git Rules
 
 - Never use `git -C` flag. Always `cd` to the working directory first or work from the current directory.
+
+## Worktrees
+
+Feature development uses git worktrees in `.worktrees/` (already in .gitignore).
+
+### Using `tea` from a worktree
+
+`tea` cannot auto-detect the repository when running from a worktree. Specify all parameters explicitly:
+
+```bash
+# Find your login name (use the NAME column)
+tea login list
+
+# Create PR with explicit parameters
+tea pr create \
+  --login <login-name> \
+  --repo sh/terraform-provider-truenas \
+  --head <branch-name> \
+  --base main \
+  --title "..." \
+  --description "..."
+```
