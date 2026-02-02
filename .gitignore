@@ -25,3 +25,5 @@ terraform-provider-truenas_v*
 
 # Git worktrees
 .worktrees/
+mise.local.toml
+coverage*.out

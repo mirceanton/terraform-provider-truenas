@@ -15,6 +15,7 @@ import (
 
 	"al.essio.dev/pkg/shellescape"
 	"github.com/deevus/terraform-provider-truenas/internal/api"
+	"github.com/hashicorp/terraform-plugin-log/tflog"
 	"golang.org/x/crypto/ssh"
 )
 
@@ -242,6 +243,12 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 	}
 	cmd += paramsStr
 
+	// Log request
+	tflog.Debug(ctx, "API request", map[string]any{
+		"method": method,
+		"params": paramsStr,
+	})
+
 	// Create session
 	session, err := c.clientWrapper.NewSession()
 	if err != nil {
@@ -251,6 +258,14 @@ func (c *SSHClient) Call(ctx context.Context, method string, params any) (json.R
 
 	// Execute command - use CombinedOutput to capture stderr for error messages
 	output, err := session.CombinedOutput(cmd)
+
+	// Log response
+	tflog.Debug(ctx, "API response", map[string]any{
+		"method": method,
+		"output": string(output),
+		"error":  err,
+	})
+
 	if err != nil {
 		// Include the output (which contains stderr) in the error message
 		if len(output) > 0 {
@@ -300,6 +315,12 @@ func (c *SSHClient) callAndWaitWithFlag(ctx context.Context, method string, para
 	}
 	cmd += paramsStr
 
+	// Log request
+	tflog.Debug(ctx, "API request (job)", map[string]any{
+		"method": method,
+		"params": paramsStr,
+	})
+
 	// Create session
 	session, err := c.clientWrapper.NewSession()
 	if err != nil {
@@ -309,6 +330,13 @@ func (c *SSHClient) callAndWaitWithFlag(ctx context.Context, method string, para
 
 	// Execute command - use CombinedOutput to capture stderr for error messages
 	output, err := session.CombinedOutput(cmd)
+
+	// Log response
+	tflog.Debug(ctx, "API response (job)", map[string]any{
+		"method": method,
+		"output": string(output),
+		"error":  err,
+	})
 	if err != nil {
 		// Strip ANSI codes for cleaner error messages
 		cleaned := ansiRegex.ReplaceAll(output, nil)

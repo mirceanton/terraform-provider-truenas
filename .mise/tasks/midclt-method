@@ -1,0 +1,27 @@
+#!/usr/bin/env -S usage bash
+#MISE description="Get method details from TrueNAS core.get_methods"
+#MISE alias="mm"
+#USAGE arg "<method>" help="Method name (e.g., virt.instance.stop)"
+# Environment variables:
+#   TRUENAS_HOST - TrueNAS host (e.g., solaris-1.outlook)
+#   TRUENAS_PORT - SSH port (default: 22)
+#   TRUENAS_USER - SSH username (default: root)
+#   TRUENAS_KEY  - SSH private key file path
+
+set -e
+
+if [[ -z "$TRUENAS_HOST" ]]; then
+  echo "Error: TRUENAS_HOST environment variable is required" >&2
+  exit 1
+fi
+
+PORT="${TRUENAS_PORT:-22}"
+USER="${TRUENAS_USER:-root}"
+
+SSH_OPTS=(-p "$PORT")
+if [[ -n "$TRUENAS_KEY" ]]; then
+  SSH_OPTS+=(-i "$TRUENAS_KEY")
+fi
+
+# Get all methods and filter to the one we want
+ssh "${SSH_OPTS[@]}" "${USER}@${TRUENAS_HOST}" midclt call core.get_methods | jq --arg method "$usage_method" '.[$method]'

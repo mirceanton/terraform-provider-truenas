@@ -309,6 +309,7 @@ func TestProvider_Resources(t *testing.T) {
 		"truenas_cloudsync_task",
 		"truenas_cron_job",
 		"truenas_virt_config",
+		"truenas_virt_instance",
 	}
 	for _, name := range expected {
 		if !registered[name] {

@@ -5,6 +5,7 @@ This repository contains a Terraform provider for TrueNAS SCALE and Community ed
 ## Development workflow
 
 1. Development tasks are conducted using `mise`. Run `mise tasks` to see what tasks are available.
+2. To check a midclt method signature, run `mise run midclt-method {method}`
 
 ### Design and implementation plans
 
