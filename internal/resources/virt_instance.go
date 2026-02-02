@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -48,6 +50,7 @@ type VirtInstanceResourceModel struct {
 	State           types.String `tfsdk:"state"`
 	UUID            types.String `tfsdk:"uuid"`
 	ShutdownTimeout types.Int64  `tfsdk:"shutdown_timeout"`
+	Addresses       types.List   `tfsdk:"addresses"`
 	Disks           []DiskModel  `tfsdk:"disk"`
 	NICs            []NICModel   `tfsdk:"nic"`
 	Proxies         []ProxyModel `tfsdk:"proxy"`
@@ -78,6 +81,13 @@ type ProxyModel struct {
 	DestPort    types.Int64  `tfsdk:"dest_port"`
 }
 
+// AddressModel represents an IP address assigned to the instance.
+type AddressModel struct {
+	Type    types.String `tfsdk:"type"`    // "INET" or "INET6"
+	Address types.String `tfsdk:"address"` // e.g., "192.168.1.203"
+	Netmask types.Int64  `tfsdk:"netmask"` // e.g., 24
+}
+
 // virtInstanceAPIResponse represents the JSON response from virt.instance API calls (TrueNAS 25.0+).
 type virtInstanceAPIResponse struct {
 	ID          string                 `json:"id"`
@@ -88,10 +98,18 @@ type virtInstanceAPIResponse struct {
 	Memory      *int64                 `json:"memory"`
 	Autostart   bool                   `json:"autostart"`
 	Environment map[string]string      `json:"environment"`
+	Aliases     []virtInstanceAlias    `json:"aliases"`
 	Image       virtInstanceImage      `json:"image"`
 	StoragePool string                 `json:"storage_pool"`
 	VNCEnabled  bool                   `json:"vnc_enabled"`
 	VNCPort     *int                   `json:"vnc_port"`
+}
+
+// virtInstanceAlias represents an IP address alias from the API.
+type virtInstanceAlias struct {
+	Type    string `json:"type"`    // "INET" or "INET6"
+	Address string `json:"address"`
+	Netmask *int64 `json:"netmask"` // nullable per API schema
 }
 
 type virtInstanceImage struct {
@@ -215,6 +233,26 @@ func (r *VirtInstanceResource) Schema(ctx context.Context, req resource.SchemaRe
 				Optional:    true,
 				Computed:    true,
 				Default:     int64default.StaticInt64(30),
+			},
+			"addresses": schema.ListNestedAttribute{
+				Description: "IP addresses assigned to the instance. Empty when stopped.",
+				Computed:    true,
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"type": schema.StringAttribute{
+							Description: "Address type: INET (IPv4) or INET6 (IPv6).",
+							Computed:    true,
+						},
+						"address": schema.StringAttribute{
+							Description: "IP address.",
+							Computed:    true,
+						},
+						"netmask": schema.Int64Attribute{
+							Description: "Network mask prefix length.",
+							Computed:    true,
+						},
+					},
+				},
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -363,7 +401,7 @@ func (r *VirtInstanceResource) Create(ctx context.Context, req resource.CreateRe
 	}
 
 	// Query the container to get current state
-	container, err := r.queryVirtInstance(ctx, containerName)
+	container, err := r.getVirtInstance(ctx, containerName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Query Container After Create",
@@ -431,7 +469,7 @@ func (r *VirtInstanceResource) Create(ctx context.Context, req resource.CreateRe
 
 		// Wait for stable state
 		queryFunc := func(ctx context.Context, n string) (string, error) {
-			return r.queryVirtInstanceState(ctx, n)
+			return r.getVirtInstanceState(ctx, n)
 		}
 
 		finalState, err := waitForStableState(ctx, containerName, timeout, queryFunc)
@@ -444,6 +482,14 @@ func (r *VirtInstanceResource) Create(ctx context.Context, req resource.CreateRe
 		}
 
 		data.State = types.StringValue(finalState)
+	}
+
+	// Re-query container to get fresh addresses (networking may take time to come up)
+	// Small delay to allow networking to initialize after container start
+	time.Sleep(2 * time.Second)
+	freshContainer, _ := r.getVirtInstance(ctx, containerName)
+	if freshContainer != nil {
+		data.Addresses = mapAliasesToAddresses(freshContainer.Aliases)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -473,7 +519,7 @@ func (r *VirtInstanceResource) Read(ctx context.Context, req resource.ReadReques
 
 	containerName := data.Name.ValueString()
 
-	container, err := r.queryVirtInstance(ctx, containerName)
+	container, err := r.getVirtInstance(ctx, containerName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Read Container",
@@ -576,7 +622,7 @@ func (r *VirtInstanceResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	// Query current state
-	currentState, err := r.queryVirtInstanceState(ctx, containerName)
+	currentState, err := r.getVirtInstanceState(ctx, containerName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Query Container State",
@@ -594,7 +640,7 @@ func (r *VirtInstanceResource) Update(ctx context.Context, req resource.UpdateRe
 	// Wait for transitional states to complete
 	if !isVirtInstanceStableState(currentState) {
 		queryFunc := func(ctx context.Context, n string) (string, error) {
-			return r.queryVirtInstanceState(ctx, n)
+			return r.getVirtInstanceState(ctx, n)
 		}
 
 		stableState, err := waitForStableState(ctx, containerName, timeout, queryFunc)
@@ -628,7 +674,7 @@ func (r *VirtInstanceResource) Update(ctx context.Context, req resource.UpdateRe
 			return
 		}
 		// Query final state after reconciliation
-		currentState, err = r.queryVirtInstanceState(ctx, containerName)
+		currentState, err = r.getVirtInstanceState(ctx, containerName)
 		if err != nil {
 			resp.Diagnostics.AddError(
 				"Unable to Query Container State After Reconciliation",
@@ -639,7 +685,7 @@ func (r *VirtInstanceResource) Update(ctx context.Context, req resource.UpdateRe
 	}
 
 	// Query full container info to update state
-	container, err := r.queryVirtInstance(ctx, containerName)
+	container, err := r.getVirtInstance(ctx, containerName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Query Container After Update",
@@ -670,7 +716,7 @@ func (r *VirtInstanceResource) Delete(ctx context.Context, req resource.DeleteRe
 	containerID := data.ID.ValueString()
 
 	// Check current state - if running, stop first
-	currentState, err := r.queryVirtInstanceState(ctx, containerName)
+	currentState, err := r.getVirtInstanceState(ctx, containerName)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Query Container State",
@@ -809,29 +855,41 @@ func (r *VirtInstanceResource) buildUpdateParams(plan, state *VirtInstanceResour
 	return params
 }
 
-// queryVirtInstance queries the container by name and returns the API response.
-func (r *VirtInstanceResource) queryVirtInstance(ctx context.Context, name string) (*virtInstanceAPIResponse, error) {
-	filter := [][]any{{"name", "=", name}}
-	result, err := r.client.Call(ctx, "virt.instance.query", filter)
+// getVirtInstance retrieves a container by name using virt.instance.get_instance.
+// Returns nil, nil if the container does not exist.
+func (r *VirtInstanceResource) getVirtInstance(ctx context.Context, name string) (*virtInstanceAPIResponse, error) {
+	result, err := r.client.Call(ctx, "virt.instance.get_instance", name)
 	if err != nil {
+		// Check if it's a "not found" error
+		if isNotFoundError(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
-	var containers []virtInstanceAPIResponse
-	if err := json.Unmarshal(result, &containers); err != nil {
+	var container virtInstanceAPIResponse
+	if err := json.Unmarshal(result, &container); err != nil {
 		return nil, fmt.Errorf("parse response: %w", err)
 	}
 
-	if len(containers) == 0 {
-		return nil, nil
-	}
-
-	return &containers[0], nil
+	return &container, nil
 }
 
-// queryVirtInstanceState queries the current state of a container.
-func (r *VirtInstanceResource) queryVirtInstanceState(ctx context.Context, name string) (string, error) {
-	container, err := r.queryVirtInstance(ctx, name)
+// isNotFoundError checks if an error indicates the resource was not found.
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// TrueNAS API returns errors containing "does not exist" or "not found" for missing resources
+	errLower := strings.ToLower(err.Error())
+	return strings.Contains(errLower, "does not exist") ||
+		strings.Contains(errLower, "not found") ||
+		strings.Contains(errLower, "no such instance")
+}
+
+// getVirtInstanceState queries the current state of a container.
+func (r *VirtInstanceResource) getVirtInstanceState(ctx context.Context, name string) (string, error) {
+	container, err := r.getVirtInstance(ctx, name)
 	if err != nil {
 		return "", err
 	}
@@ -857,6 +915,35 @@ func (r *VirtInstanceResource) mapVirtInstanceToModel(container *virtInstanceAPI
 
 	// Use container ID as UUID (virt.instance uses name as ID)
 	data.UUID = types.StringValue(container.ID)
+
+	// Map IP addresses from aliases
+	data.Addresses = mapAliasesToAddresses(container.Aliases)
+}
+
+// addressAttrTypes returns the attribute types for AddressModel used in types.List.
+func addressAttrTypes() map[string]attr.Type {
+	return map[string]attr.Type{
+		"type":    types.StringType,
+		"address": types.StringType,
+		"netmask": types.Int64Type,
+	}
+}
+
+// mapAliasesToAddresses converts API aliases to types.List.
+func mapAliasesToAddresses(aliases []virtInstanceAlias) types.List {
+	if len(aliases) == 0 {
+		return types.ListValueMust(types.ObjectType{AttrTypes: addressAttrTypes()}, []attr.Value{})
+	}
+
+	elements := make([]attr.Value, len(aliases))
+	for i, alias := range aliases {
+		elements[i] = types.ObjectValueMust(addressAttrTypes(), map[string]attr.Value{
+			"type":    types.StringValue(alias.Type),
+			"address": types.StringValue(alias.Address),
+			"netmask": types.Int64PointerValue(alias.Netmask),
+		})
+	}
+	return types.ListValueMust(types.ObjectType{AttrTypes: addressAttrTypes()}, elements)
 }
 
 // queryDevices queries the devices attached to a container.
@@ -1207,7 +1294,7 @@ func (r *VirtInstanceResource) reconcileDesiredState(
 
 	// Wait for stable state
 	queryFunc := func(ctx context.Context, n string) (string, error) {
-		return r.queryVirtInstanceState(ctx, n)
+		return r.getVirtInstanceState(ctx, n)
 	}
 
 	finalState, err := waitForStableState(ctx, name, timeout, queryFunc)

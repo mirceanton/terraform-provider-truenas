@@ -71,6 +71,34 @@ resource "truenas_virt_instance" "bridged" {
 }
 ```
 
+### Accessing Instance IP Addresses
+
+```terraform
+resource "truenas_virt_instance" "app" {
+  name          = "my-app"
+  image_name    = "ubuntu"
+  image_version = "24.04"
+  storage_pool  = "tank"
+
+  nic {
+    nic_type = "MACVLAN"
+    parent   = "eno1"
+  }
+}
+
+# Get first IPv4 address
+output "ipv4_address" {
+  value = try([for a in truenas_virt_instance.app.addresses : a.address if a.type == "INET"][0], null)
+}
+
+# Get all addresses
+output "all_addresses" {
+  value = truenas_virt_instance.app.addresses
+}
+```
+
+-> **Note:** The `addresses` attribute is empty when the container is stopped, as network interfaces are not active.
+
 ## Import
 
 Containers can be imported using the container name:

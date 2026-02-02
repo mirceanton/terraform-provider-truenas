@@ -77,7 +77,7 @@ func TestVirtInstanceResource_Schema(t *testing.T) {
 	}
 
 	// Test computed attributes
-	computedAttrs := []string{"id", "uuid", "state"}
+	computedAttrs := []string{"id", "uuid", "state", "addresses"}
 	for _, name := range computedAttrs {
 		attr, ok := attrs[name]
 		if !ok {
@@ -168,16 +168,27 @@ func getVirtInstanceResourceSchema(t *testing.T) resource.SchemaResponse {
 	return *schemaResp
 }
 
-// mockVirtInstanceResponse generates a valid virt.instance.query JSON response.
+// mockVirtInstanceResponse generates a valid virt.instance.get_instance JSON response.
 func mockVirtInstanceResponse(name, status string, autostart bool) json.RawMessage {
-	return json.RawMessage(fmt.Sprintf(`[{
+	return mockVirtInstanceResponseWithAliases(name, status, autostart, nil)
+}
+
+// mockVirtInstanceResponseWithAliases generates a virt.instance.get_instance response with custom aliases.
+func mockVirtInstanceResponseWithAliases(name, status string, autostart bool, aliases []map[string]interface{}) json.RawMessage {
+	aliasesJSON := "[]"
+	if len(aliases) > 0 {
+		aliasBytes, _ := json.Marshal(aliases)
+		aliasesJSON = string(aliasBytes)
+	}
+	return json.RawMessage(fmt.Sprintf(`{
 		"id": %q,
 		"name": %q,
 		"storage_pool": "tank",
 		"image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""},
 		"status": %q,
-		"autostart": %t
-	}]`, name, name, status, autostart))
+		"autostart": %t,
+		"aliases": %s
+	}`, name, name, status, autostart, aliasesJSON))
 }
 
 // virtInstanceModelParams holds parameters for creating test model values.
@@ -193,9 +204,16 @@ type virtInstanceModelParams struct {
 	State           interface{}
 	UUID            interface{}
 	ShutdownTimeout interface{}
+	Addresses       []addressParams
 	Disks           []diskParams
 	NICs            []nicParams
 	Proxies         []proxyParams
+}
+
+type addressParams struct {
+	Type    interface{}
+	Address interface{}
+	Netmask interface{}
 }
 
 type diskParams struct {
@@ -257,6 +275,17 @@ func proxyBlockType() tftypes.Object {
 	}
 }
 
+// addressAttrType returns the tftypes.Object type for address attributes.
+func addressAttrType() tftypes.Object {
+	return tftypes.Object{
+		AttributeTypes: map[string]tftypes.Type{
+			"type":    tftypes.String,
+			"address": tftypes.String,
+			"netmask": tftypes.Number,
+		},
+	}
+}
+
 func createVirtInstanceModelValue(p virtInstanceModelParams) tftypes.Value {
 	// Build disk block values
 	var diskValues []tftypes.Value
@@ -310,6 +339,22 @@ func createVirtInstanceModelValue(p virtInstanceModelParams) tftypes.Value {
 		proxyListValue = tftypes.NewValue(tftypes.List{ElementType: proxyBlockType()}, proxyValues)
 	}
 
+	// Build address attribute values
+	var addressValues []tftypes.Value
+	for _, a := range p.Addresses {
+		addressValues = append(addressValues, tftypes.NewValue(addressAttrType(), map[string]tftypes.Value{
+			"type":    tftypes.NewValue(tftypes.String, a.Type),
+			"address": tftypes.NewValue(tftypes.String, a.Address),
+			"netmask": tftypes.NewValue(tftypes.Number, a.Netmask),
+		}))
+	}
+	var addressListValue tftypes.Value
+	if len(addressValues) == 0 {
+		addressListValue = tftypes.NewValue(tftypes.List{ElementType: addressAttrType()}, []tftypes.Value{})
+	} else {
+		addressListValue = tftypes.NewValue(tftypes.List{ElementType: addressAttrType()}, addressValues)
+	}
+
 	values := map[string]tftypes.Value{
 		"id":               tftypes.NewValue(tftypes.String, p.ID),
 		"name":             tftypes.NewValue(tftypes.String, p.Name),
@@ -322,6 +367,7 @@ func createVirtInstanceModelValue(p virtInstanceModelParams) tftypes.Value {
 		"state":            tftypes.NewValue(tftypes.String, p.State),
 		"uuid":             tftypes.NewValue(tftypes.String, p.UUID),
 		"shutdown_timeout": tftypes.NewValue(tftypes.Number, p.ShutdownTimeout),
+		"addresses":        addressListValue,
 		"disk":             diskListValue,
 		"nic":              nicListValue,
 		"proxy":            proxyListValue,
@@ -340,6 +386,7 @@ func createVirtInstanceModelValue(p virtInstanceModelParams) tftypes.Value {
 			"state":            tftypes.String,
 			"uuid":             tftypes.String,
 			"shutdown_timeout": tftypes.Number,
+			"addresses":        tftypes.List{ElementType: addressAttrType()},
 			"disk":             tftypes.List{ElementType: diskBlockType()},
 			"nic":              tftypes.List{ElementType: nicBlockType()},
 			"proxy":            tftypes.List{ElementType: proxyBlockType()},
@@ -745,7 +792,8 @@ func TestVirtInstanceResource_Create_NotFoundAfterCreate(t *testing.T) {
 				return json.RawMessage(`1`), nil
 			},
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				return json.RawMessage(`[]`), nil
+				// virt.instance.get_instance returns error when not found
+				return nil, errors.New("No such instance: test-container")
 			},
 		},
 	}
@@ -787,8 +835,8 @@ func TestVirtInstanceResource_Read_Success(t *testing.T) {
 		client: &client.MockClient{
 			VersionVal: api.Version{Major: 25, Minor: 4, Patch: 0, Build: 0},
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				if method != "virt.instance.query" {
-					t.Errorf("expected method 'virt.instance.query', got %q", method)
+				if method != "virt.instance.get_instance" {
+					t.Errorf("expected method 'virt.instance.get_instance', got %q", method)
 				}
 				return mockVirtInstanceResponse("test-container", "RUNNING", true), nil
 			},
@@ -849,7 +897,8 @@ func TestVirtInstanceResource_Read_NotFound(t *testing.T) {
 		client: &client.MockClient{
 			VersionVal: api.Version{Major: 25, Minor: 4, Patch: 0, Build: 0},
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				return json.RawMessage(`[]`), nil
+				// virt.instance.get_instance returns an error when not found
+				return nil, errors.New("No such instance: test-container")
 			},
 		},
 	}
@@ -1488,14 +1537,15 @@ func TestVirtInstanceResource_Create_WithDevices(t *testing.T) {
 						{"dev_type": "DISK", "name": "data", "source": "/mnt/tank/data", "destination": "/data", "readonly": false}
 					]`), nil
 				}
-				return json.RawMessage(`[{
+				return json.RawMessage(`{
 					"id": "1",
 					"name": "test-container",
 					"storage_pool": "tank",
 					"image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""},
 					"status": "RUNNING",
-					"autostart": true
-				}]`), nil
+					"autostart": true,
+					"aliases": []
+				}`), nil
 			},
 		},
 	}
@@ -1554,20 +1604,20 @@ func TestVirtInstanceResource_Create_WithDevices(t *testing.T) {
 	}
 }
 
-func TestVirtInstanceResource_queryVirtInstanceState(t *testing.T) {
+func TestVirtInstanceResource_getVirtInstanceState(t *testing.T) {
 	r := &VirtInstanceResource{
 		client: &client.MockClient{
 			VersionVal: api.Version{Major: 25, Minor: 4, Patch: 0, Build: 0},
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				if method != "virt.instance.query" {
-					t.Errorf("expected method 'virt.instance.query', got %q", method)
+				if method != "virt.instance.get_instance" {
+					t.Errorf("expected method 'virt.instance.get_instance', got %q", method)
 				}
-				return json.RawMessage(`[{"id": "1", "name": "test-container", "status": "RUNNING", "storage_pool": "tank", "autostart": false, "image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""}}]`), nil
+				return json.RawMessage(`{"id": "1", "name": "test-container", "status": "RUNNING", "storage_pool": "tank", "autostart": false, "aliases": [], "image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""}}`), nil
 			},
 		},
 	}
 
-	state, err := r.queryVirtInstanceState(context.Background(), "test-container")
+	state, err := r.getVirtInstanceState(context.Background(), "test-container")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1576,17 +1626,18 @@ func TestVirtInstanceResource_queryVirtInstanceState(t *testing.T) {
 	}
 }
 
-func TestVirtInstanceResource_queryVirtInstanceState_NotFound(t *testing.T) {
+func TestVirtInstanceResource_getVirtInstanceState_NotFound(t *testing.T) {
 	r := &VirtInstanceResource{
 		client: &client.MockClient{
 			VersionVal: api.Version{Major: 25, Minor: 4, Patch: 0, Build: 0},
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				return json.RawMessage(`[]`), nil
+				// virt.instance.get_instance returns error when not found
+				return nil, errors.New("No such instance: test-container")
 			},
 		},
 	}
 
-	_, err := r.queryVirtInstanceState(context.Background(), "test-container")
+	_, err := r.getVirtInstanceState(context.Background(), "test-container")
 	if err == nil {
 		t.Fatal("expected error for container not found")
 	}
@@ -1602,7 +1653,7 @@ func TestVirtInstanceResource_reconcileDesiredState_StartContainer(t *testing.T)
 				return nil, nil
 			},
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				return json.RawMessage(`[{"id": "1", "name": "test-container", "status": "RUNNING", "storage_pool": "tank", "autostart": false, "image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""}}]`), nil
+				return json.RawMessage(`{"id": "1", "name": "test-container", "status": "RUNNING", "storage_pool": "tank", "autostart": false, "aliases": [], "image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""}}`), nil
 			},
 		},
 	}
@@ -1633,7 +1684,7 @@ func TestVirtInstanceResource_reconcileDesiredState_StopContainer(t *testing.T) 
 				return nil, nil
 			},
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
-				return json.RawMessage(`[{"id": "1", "name": "test-container", "status": "STOPPED", "storage_pool": "tank", "autostart": false, "image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""}}]`), nil
+				return json.RawMessage(`{"id": "1", "name": "test-container", "status": "STOPPED", "storage_pool": "tank", "autostart": false, "aliases": [], "image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""}}`), nil
 			},
 		},
 	}
@@ -2685,7 +2736,7 @@ func TestVirtInstanceResource_reconcileDesiredState_WrongFinalState(t *testing.T
 			},
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				// Return STOPPED instead of RUNNING
-				return json.RawMessage(`[{"id": "test-id", "name": "test", "status": "STOPPED", "storage_pool": "tank", "autostart": false, "image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""}}]`), nil
+				return json.RawMessage(`{"id": "test-id", "name": "test", "status": "STOPPED", "storage_pool": "tank", "autostart": false, "aliases": [], "image": {"os": "ubuntu", "release": "24.04", "architecture": "amd64", "description": "", "variant": ""}}`), nil
 			},
 		},
 	}
@@ -2981,5 +3032,235 @@ func TestIsVirtInstanceStableState(t *testing.T) {
 				t.Errorf("isVirtInstanceStableState(%q) = %v, expected %v", tc.state, result, tc.expected)
 			}
 		})
+	}
+}
+
+// Test for isNotFoundError
+func TestIsNotFoundError(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"does not exist", errors.New("Instance does not exist"), true},
+		{"not found", errors.New("Container not found"), true},
+		{"no such instance", errors.New("No such instance: test"), true},
+		{"case insensitive", errors.New("DOES NOT EXIST"), true},
+		{"unrelated error", errors.New("connection failed"), false},
+		{"api error", errors.New("API returned 500"), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := isNotFoundError(tc.err)
+			if result != tc.expected {
+				t.Errorf("isNotFoundError(%v) = %v, expected %v", tc.err, result, tc.expected)
+			}
+		})
+	}
+}
+
+// Test for mapAliasesToAddresses
+func TestMapAliasesToAddresses(t *testing.T) {
+	t.Run("empty aliases", func(t *testing.T) {
+		result := mapAliasesToAddresses(nil)
+		if result.IsNull() {
+			t.Error("expected non-null list")
+		}
+		elements := result.Elements()
+		if len(elements) != 0 {
+			t.Errorf("expected empty list, got %d items", len(elements))
+		}
+	})
+
+	t.Run("single IPv4 address", func(t *testing.T) {
+		netmask := int64(24)
+		aliases := []virtInstanceAlias{
+			{Type: "INET", Address: "192.168.1.100", Netmask: &netmask},
+		}
+		result := mapAliasesToAddresses(aliases)
+		elements := result.Elements()
+		if len(elements) != 1 {
+			t.Fatalf("expected 1 address, got %d", len(elements))
+		}
+		obj := elements[0].(types.Object)
+		attrs := obj.Attributes()
+		if attrs["type"].(types.String).ValueString() != "INET" {
+			t.Errorf("expected type INET, got %s", attrs["type"].(types.String).ValueString())
+		}
+		if attrs["address"].(types.String).ValueString() != "192.168.1.100" {
+			t.Errorf("expected address 192.168.1.100, got %s", attrs["address"].(types.String).ValueString())
+		}
+		if attrs["netmask"].(types.Int64).ValueInt64() != 24 {
+			t.Errorf("expected netmask 24, got %d", attrs["netmask"].(types.Int64).ValueInt64())
+		}
+	})
+
+	t.Run("multiple addresses", func(t *testing.T) {
+		netmask24 := int64(24)
+		netmask64 := int64(64)
+		aliases := []virtInstanceAlias{
+			{Type: "INET", Address: "192.168.1.100", Netmask: &netmask24},
+			{Type: "INET6", Address: "2001:db8::1", Netmask: &netmask64},
+		}
+		result := mapAliasesToAddresses(aliases)
+		elements := result.Elements()
+		if len(elements) != 2 {
+			t.Fatalf("expected 2 addresses, got %d", len(elements))
+		}
+		obj0 := elements[0].(types.Object)
+		if obj0.Attributes()["type"].(types.String).ValueString() != "INET" {
+			t.Errorf("expected first type INET, got %s", obj0.Attributes()["type"].(types.String).ValueString())
+		}
+		obj1 := elements[1].(types.Object)
+		if obj1.Attributes()["type"].(types.String).ValueString() != "INET6" {
+			t.Errorf("expected second type INET6, got %s", obj1.Attributes()["type"].(types.String).ValueString())
+		}
+	})
+
+	t.Run("nil netmask", func(t *testing.T) {
+		aliases := []virtInstanceAlias{
+			{Type: "INET", Address: "192.168.1.100", Netmask: nil},
+		}
+		result := mapAliasesToAddresses(aliases)
+		elements := result.Elements()
+		if len(elements) != 1 {
+			t.Fatalf("expected 1 address, got %d", len(elements))
+		}
+		obj := elements[0].(types.Object)
+		netmaskVal := obj.Attributes()["netmask"].(types.Int64)
+		if !netmaskVal.IsNull() {
+			t.Errorf("expected netmask to be null, got %d", netmaskVal.ValueInt64())
+		}
+	})
+}
+
+// Test addresses populated when running
+func TestVirtInstanceResource_Read_WithAddresses(t *testing.T) {
+	r := &VirtInstanceResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 25, Minor: 4, Patch: 0, Build: 0},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "virt.instance.get_instance" {
+					return mockVirtInstanceResponseWithAliases(
+						"test-container",
+						"RUNNING",
+						false,
+						[]map[string]interface{}{
+							{"type": "INET", "address": "192.168.1.100", "netmask": 24},
+							{"type": "INET6", "address": "2001:db8::1", "netmask": 64},
+						},
+					), nil
+				}
+				return nil, errors.New("unexpected method: " + method)
+			},
+		},
+	}
+
+	schemaResp := getVirtInstanceResourceSchema(t)
+	stateValue := createVirtInstanceModelValue(virtInstanceModelParams{
+		ID:           "test-container",
+		Name:         "test-container",
+		StoragePool:  "tank",
+		ImageName:    "ubuntu",
+		ImageVersion: "24.04",
+		DesiredState: "RUNNING",
+		StateTimeout: float64(90),
+	})
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Read(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Extract model from state to verify addresses
+	var model VirtInstanceResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get model: %v", diags)
+	}
+
+	elements := model.Addresses.Elements()
+	if len(elements) != 2 {
+		t.Fatalf("expected 2 addresses, got %d", len(elements))
+	}
+	obj0 := elements[0].(types.Object)
+	if obj0.Attributes()["type"].(types.String).ValueString() != "INET" {
+		t.Errorf("expected first address type INET, got %s", obj0.Attributes()["type"].(types.String).ValueString())
+	}
+	if obj0.Attributes()["address"].(types.String).ValueString() != "192.168.1.100" {
+		t.Errorf("expected first address 192.168.1.100, got %s", obj0.Attributes()["address"].(types.String).ValueString())
+	}
+}
+
+// Test addresses empty when stopped
+func TestVirtInstanceResource_Read_AddressesEmptyWhenStopped(t *testing.T) {
+	r := &VirtInstanceResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 25, Minor: 4, Patch: 0, Build: 0},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "virt.instance.get_instance" {
+					// Stopped container has no aliases
+					return mockVirtInstanceResponse("test-container", "STOPPED", false), nil
+				}
+				return nil, errors.New("unexpected method: " + method)
+			},
+		},
+	}
+
+	schemaResp := getVirtInstanceResourceSchema(t)
+	stateValue := createVirtInstanceModelValue(virtInstanceModelParams{
+		ID:           "test-container",
+		Name:         "test-container",
+		StoragePool:  "tank",
+		ImageName:    "ubuntu",
+		ImageVersion: "24.04",
+		DesiredState: "STOPPED",
+		StateTimeout: float64(90),
+	})
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+		},
+	}
+
+	r.Read(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// Extract model from state to verify addresses are empty
+	var model VirtInstanceResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get model: %v", diags)
+	}
+
+	elements := model.Addresses.Elements()
+	if len(elements) != 0 {
+		t.Errorf("expected 0 addresses when stopped, got %d", len(elements))
 	}
 }
