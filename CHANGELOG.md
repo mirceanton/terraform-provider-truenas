@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.12.0] - 2026-02-04
+
+
+### Added
+
+- Early version detection with Connect/Version pattern (#24)
+- Add truenas_virt_config data source and resource (#29)
+- Add truenas_virt_instance resource (#30)
+- Add addresses attribute to virt_instance resource (#36)
+
+### Documentation
+
+- **api:** Expand filesystem API documentation with 10 new methods (#21)
+
+### Fixed
+
+- SSH transport job polling for TrueNAS 24.x (#23)
+- WebSocket transient network resilience (#26)
+- Preserve custom docs with tfplugindocs templates (#35)
+
+### Testing
+
+- Add comprehensive coverage for version parsing and MockClient methods
+- Add comprehensive version comparison tests (#28)
+
 ## [0.11.0] - 2026-01-28
 
 
