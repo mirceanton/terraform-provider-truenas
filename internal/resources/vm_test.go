@@ -508,16 +508,17 @@ func TestVMResource_buildCreateParams(t *testing.T) {
 
 	t.Run("with optional fields", func(t *testing.T) {
 		data := &VMResourceModel{
-			Name:        types.StringValue("test-vm"),
-			Memory:      types.Int64Value(4096),
-			Description: types.StringValue("A test VM"),
-			VCPUs:       types.Int64Value(2),
-			Cores:       types.Int64Value(2),
-			Threads:     types.Int64Value(2),
-			Autostart:   types.BoolValue(false),
-			Time:        types.StringValue("UTC"),
-			Bootloader:  types.StringValue("UEFI"),
-			CPUMode:     types.StringValue("HOST-PASSTHROUGH"),
+			Name:            types.StringValue("test-vm"),
+			Memory:          types.Int64Value(4096),
+			Description:     types.StringValue("A test VM"),
+			VCPUs:           types.Int64Value(2),
+			Cores:           types.Int64Value(2),
+			Threads:         types.Int64Value(2),
+			Autostart:       types.BoolValue(false),
+			Time:            types.StringValue("UTC"),
+			Bootloader:      types.StringValue("UEFI"),
+			CPUMode:         types.StringValue("HOST-PASSTHROUGH"),
+			CommandLineArgs: types.StringValue("-cpu host"),
 		}
 		params := r.buildCreateParams(data)
 		if params["description"] != "A test VM" {
@@ -534,6 +535,9 @@ func TestVMResource_buildCreateParams(t *testing.T) {
 		}
 		if params["cpu_mode"] != "HOST-PASSTHROUGH" {
 			t.Errorf("expected cpu_mode HOST-PASSTHROUGH, got %v", params["cpu_mode"])
+		}
+		if params["command_line_args"] != "-cpu host" {
+			t.Errorf("expected command_line_args '-cpu host', got %v", params["command_line_args"])
 		}
 	})
 
@@ -2862,6 +2866,7 @@ func TestVMResource_buildUpdateParams(t *testing.T) {
 			CPUMode:         types.StringValue("HOST-PASSTHROUGH"),
 			CPUModel:        types.StringValue("Haswell"),
 			ShutdownTimeout: types.Int64Value(120),
+			CommandLineArgs: types.StringValue("-cpu host"),
 		}
 		state := &VMResourceModel{
 			Name:            types.StringValue("test-vm"),
@@ -2878,6 +2883,7 @@ func TestVMResource_buildUpdateParams(t *testing.T) {
 			CPUMode:         types.StringValue("CUSTOM"),
 			CPUModel:        types.StringNull(),
 			ShutdownTimeout: types.Int64Value(90),
+			CommandLineArgs: types.StringValue(""),
 		}
 		params := r.buildUpdateParams(plan, state)
 
@@ -2894,8 +2900,9 @@ func TestVMResource_buildUpdateParams(t *testing.T) {
 			"bootloader":      "UEFI_CSM",
 			"bootloader_ovmf": "OVMF_CODE_TPM.fd",
 			"cpu_mode":        "HOST-PASSTHROUGH",
-			"cpu_model":       "Haswell",
-			"shutdown_timeout": int64(120),
+			"cpu_model":         "Haswell",
+			"shutdown_timeout":  int64(120),
+			"command_line_args": "-cpu host",
 		}
 		for k, v := range expected {
 			if params[k] != v {
