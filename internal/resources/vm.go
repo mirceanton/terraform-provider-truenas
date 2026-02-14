@@ -50,6 +50,7 @@ type VMResourceModel struct {
 	CPUMode          types.String `tfsdk:"cpu_mode"`
 	CPUModel         types.String `tfsdk:"cpu_model"`
 	ShutdownTimeout  types.Int64  `tfsdk:"shutdown_timeout"`
+	CommandLineArgs  types.String `tfsdk:"command_line_args"`
 	State            types.String `tfsdk:"state"`
 	DisplayAvailable types.Bool   `tfsdk:"display_available"`
 	// Device blocks
@@ -150,7 +151,8 @@ type vmAPIResponse struct {
 	BootloaderOVMF   string          `json:"bootloader_ovmf"`
 	CPUMode          string          `json:"cpu_mode"`
 	CPUModel         *string         `json:"cpu_model"`
-	ShutdownTimeout  int64           `json:"shutdown_timeout"`
+	ShutdownTimeout  int64            `json:"shutdown_timeout"`
+	CommandLineArgs  string           `json:"command_line_args"`
 	Status           vmStatusResponse `json:"status"`
 	DisplayAvailable bool            `json:"display_available"`
 }
@@ -296,6 +298,12 @@ func (r *VMResource) Schema(ctx context.Context, req resource.SchemaRequest, res
 				Validators: []validator.Int64{
 					int64validator.Between(5, 300),
 				},
+			},
+			"command_line_args": schema.StringAttribute{
+				Description: "Extra QEMU command line arguments.",
+				Optional:    true,
+				Computed:    true,
+				Default:     stringdefault.StaticString(""),
 			},
 			"state": schema.StringAttribute{
 				Description: "Desired VM power state: RUNNING or STOPPED. Defaults to STOPPED.",

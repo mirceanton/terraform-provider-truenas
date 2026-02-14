@@ -88,6 +88,7 @@ terraform import truenas_vm.example 42
 - `bootloader` (String) Bootloader type: `UEFI` or `UEFI_CSM`. Defaults to `UEFI`.
 - `bootloader_ovmf` (String) OVMF firmware file. Defaults to `OVMF_CODE.fd`.
 - `cdrom` (Block List) CD-ROM/ISO devices. (see [below for nested schema](#nestedblock--cdrom))
+- `command_line_args` (String) Extra QEMU command line arguments.
 - `cores` (Number) CPU cores per socket. Defaults to `1`.
 - `cpu_mode` (String) CPU mode: `CUSTOM`, `HOST-MODEL`, or `HOST-PASSTHROUGH`. Defaults to `CUSTOM`.
 - `cpu_model` (String) CPU model name (when cpu_mode is CUSTOM).

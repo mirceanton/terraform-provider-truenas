@@ -49,6 +49,7 @@ func (r *VMResource) mapVMToModel(vm *vmAPIResponse, data *VMResourceModel) {
 		data.CPUModel = types.StringNull()
 	}
 	data.ShutdownTimeout = types.Int64Value(vm.ShutdownTimeout)
+	data.CommandLineArgs = types.StringValue(vm.CommandLineArgs)
 	data.State = types.StringValue(vm.Status.State)
 	data.DisplayAvailable = types.BoolValue(vm.DisplayAvailable)
 }

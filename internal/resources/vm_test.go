@@ -129,6 +129,7 @@ func vmObjectType() tftypes.Object {
 			"cpu_mode":          tftypes.String,
 			"cpu_model":         tftypes.String,
 			"shutdown_timeout":  tftypes.Number,
+			"command_line_args": tftypes.String,
 			"state":             tftypes.String,
 			"display_available": tftypes.Bool,
 			"disk":              tftypes.List{ElementType: vmDiskBlockType()},
@@ -158,6 +159,7 @@ type vmModelParams struct {
 	CPUMode          interface{}
 	CPUModel         interface{}
 	ShutdownTimeout  interface{}
+	CommandLineArgs  interface{}
 	State            interface{}
 	DisplayAvailable interface{}
 	Disks            []vmDiskParams
@@ -297,6 +299,7 @@ func createVMModelValue(p vmModelParams) tftypes.Value {
 		"cpu_mode":          tftypes.NewValue(tftypes.String, p.CPUMode),
 		"cpu_model":         tftypes.NewValue(tftypes.String, p.CPUModel),
 		"shutdown_timeout":  tftypes.NewValue(tftypes.Number, p.ShutdownTimeout),
+		"command_line_args": tftypes.NewValue(tftypes.String, p.CommandLineArgs),
 		"state":             tftypes.NewValue(tftypes.String, p.State),
 		"display_available": tftypes.NewValue(tftypes.Bool, p.DisplayAvailable),
 		"disk":              diskList,
@@ -329,6 +332,7 @@ func mockVMResponse(id int64, name string, memory int64, state string) json.RawM
 		"cpu_mode": "CUSTOM",
 		"cpu_model": null,
 		"shutdown_timeout": 90,
+		"command_line_args": "",
 		"status": {"state": %q, "pid": null, "domain_state": "SHUTOFF"},
 		"display_available": false,
 		"devices": []
@@ -358,6 +362,7 @@ func defaultVMPlanParams() vmModelParams {
 		CPUMode:         "CUSTOM",
 		CPUModel:        nil,
 		ShutdownTimeout: float64(90),
+		CommandLineArgs: "",
 		State:           "STOPPED",
 		DisplayAvailable: nil,
 	}
@@ -428,7 +433,7 @@ func TestVMResource_Schema(t *testing.T) {
 	for _, name := range []string{
 		"description", "vcpus", "cores", "threads", "autostart", "time",
 		"bootloader", "bootloader_ovmf", "cpu_mode", "cpu_model",
-		"shutdown_timeout", "state",
+		"shutdown_timeout", "command_line_args", "state",
 	} {
 		attr, ok := attrs[name]
 		if !ok {
@@ -1630,6 +1635,7 @@ func createVMModelValueFull(p vmModelParams, raws []vmRawParams, pcis []vmPCIPar
 		"cpu_mode":          tftypes.NewValue(tftypes.String, p.CPUMode),
 		"cpu_model":         tftypes.NewValue(tftypes.String, p.CPUModel),
 		"shutdown_timeout":  tftypes.NewValue(tftypes.Number, p.ShutdownTimeout),
+		"command_line_args": tftypes.NewValue(tftypes.String, p.CommandLineArgs),
 		"state":             tftypes.NewValue(tftypes.String, p.State),
 		"display_available": tftypes.NewValue(tftypes.Bool, p.DisplayAvailable),
 		"disk":              diskList,

@@ -43,6 +43,9 @@ func (r *VMResource) buildCreateParams(data *VMResourceModel) map[string]any {
 	if !data.ShutdownTimeout.IsNull() && !data.ShutdownTimeout.IsUnknown() {
 		params["shutdown_timeout"] = data.ShutdownTimeout.ValueInt64()
 	}
+	if !data.CommandLineArgs.IsNull() && !data.CommandLineArgs.IsUnknown() {
+		params["command_line_args"] = data.CommandLineArgs.ValueString()
+	}
 
 	return params
 }
@@ -99,6 +102,9 @@ func (r *VMResource) buildUpdateParams(plan, state *VMResourceModel) map[string]
 	}
 	if !plan.ShutdownTimeout.Equal(state.ShutdownTimeout) {
 		params["shutdown_timeout"] = plan.ShutdownTimeout.ValueInt64()
+	}
+	if !plan.CommandLineArgs.Equal(state.CommandLineArgs) {
+		params["command_line_args"] = plan.CommandLineArgs.ValueString()
 	}
 
 	return params
