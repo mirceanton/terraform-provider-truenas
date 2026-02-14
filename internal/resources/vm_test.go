@@ -1460,3 +1460,2682 @@ func TestVMResource_reconcileState(t *testing.T) {
 		}
 	})
 }
+
+// -- Additional helper types for raw/pci/usb model values --
+
+type vmRawParams struct {
+	DeviceID           interface{}
+	Path               interface{}
+	Type               interface{}
+	Boot               interface{}
+	Size               interface{}
+	LogicalSectorSize  interface{}
+	PhysicalSectorSize interface{}
+	IOType             interface{}
+	Serial             interface{}
+	Order              interface{}
+}
+
+type vmPCIParams struct {
+	DeviceID interface{}
+	PPTDev   interface{}
+	Order    interface{}
+}
+
+type vmUSBParams struct {
+	DeviceID       interface{}
+	ControllerType interface{}
+	Device         interface{}
+	Order          interface{}
+}
+
+// createVMModelValueFull is like createVMModelValue but supports all device types.
+func createVMModelValueFull(p vmModelParams, raws []vmRawParams, pcis []vmPCIParams, usbs []vmUSBParams) tftypes.Value {
+	// Start with the base value parts from createVMModelValue, but override raw/pci/usb lists.
+
+	// Build disk block values
+	var diskValues []tftypes.Value
+	for _, d := range p.Disks {
+		diskValues = append(diskValues, tftypes.NewValue(vmDiskBlockType(), map[string]tftypes.Value{
+			"device_id":           tftypes.NewValue(tftypes.Number, d.DeviceID),
+			"path":                tftypes.NewValue(tftypes.String, d.Path),
+			"type":                tftypes.NewValue(tftypes.String, d.Type),
+			"logical_sectorsize":  tftypes.NewValue(tftypes.Number, d.LogicalSectorSize),
+			"physical_sectorsize": tftypes.NewValue(tftypes.Number, d.PhysicalSectorSize),
+			"iotype":              tftypes.NewValue(tftypes.String, d.IOType),
+			"serial":              tftypes.NewValue(tftypes.String, d.Serial),
+			"order":               tftypes.NewValue(tftypes.Number, d.Order),
+		}))
+	}
+	diskList := emptyBlockList(vmDiskBlockType())
+	if len(diskValues) > 0 {
+		diskList = tftypes.NewValue(tftypes.List{ElementType: vmDiskBlockType()}, diskValues)
+	}
+
+	// Build NIC block values
+	var nicValues []tftypes.Value
+	for _, n := range p.NICs {
+		nicValues = append(nicValues, tftypes.NewValue(vmNICBlockType(), map[string]tftypes.Value{
+			"device_id":              tftypes.NewValue(tftypes.Number, n.DeviceID),
+			"type":                   tftypes.NewValue(tftypes.String, n.Type),
+			"nic_attach":             tftypes.NewValue(tftypes.String, n.NICAttach),
+			"mac":                    tftypes.NewValue(tftypes.String, n.MAC),
+			"trust_guest_rx_filters": tftypes.NewValue(tftypes.Bool, n.TrustGuestRXFilters),
+			"order":                  tftypes.NewValue(tftypes.Number, n.Order),
+		}))
+	}
+	nicList := emptyBlockList(vmNICBlockType())
+	if len(nicValues) > 0 {
+		nicList = tftypes.NewValue(tftypes.List{ElementType: vmNICBlockType()}, nicValues)
+	}
+
+	// Build CDROM block values
+	var cdromValues []tftypes.Value
+	for _, c := range p.CDROMs {
+		cdromValues = append(cdromValues, tftypes.NewValue(vmCDROMBlockType(), map[string]tftypes.Value{
+			"device_id": tftypes.NewValue(tftypes.Number, c.DeviceID),
+			"path":      tftypes.NewValue(tftypes.String, c.Path),
+			"order":     tftypes.NewValue(tftypes.Number, c.Order),
+		}))
+	}
+	cdromList := emptyBlockList(vmCDROMBlockType())
+	if len(cdromValues) > 0 {
+		cdromList = tftypes.NewValue(tftypes.List{ElementType: vmCDROMBlockType()}, cdromValues)
+	}
+
+	// Build Display block values
+	var displayValues []tftypes.Value
+	for _, d := range p.Displays {
+		displayValues = append(displayValues, tftypes.NewValue(vmDisplayBlockType(), map[string]tftypes.Value{
+			"device_id":  tftypes.NewValue(tftypes.Number, d.DeviceID),
+			"type":       tftypes.NewValue(tftypes.String, d.Type),
+			"resolution": tftypes.NewValue(tftypes.String, d.Resolution),
+			"port":       tftypes.NewValue(tftypes.Number, d.Port),
+			"web_port":   tftypes.NewValue(tftypes.Number, d.WebPort),
+			"bind":       tftypes.NewValue(tftypes.String, d.Bind),
+			"wait":       tftypes.NewValue(tftypes.Bool, d.Wait),
+			"password":   tftypes.NewValue(tftypes.String, d.Password),
+			"web":        tftypes.NewValue(tftypes.Bool, d.Web),
+			"order":      tftypes.NewValue(tftypes.Number, d.Order),
+		}))
+	}
+	displayList := emptyBlockList(vmDisplayBlockType())
+	if len(displayValues) > 0 {
+		displayList = tftypes.NewValue(tftypes.List{ElementType: vmDisplayBlockType()}, displayValues)
+	}
+
+	// Build Raw block values
+	var rawValues []tftypes.Value
+	for _, r := range raws {
+		rawValues = append(rawValues, tftypes.NewValue(vmRawBlockType(), map[string]tftypes.Value{
+			"device_id":           tftypes.NewValue(tftypes.Number, r.DeviceID),
+			"path":                tftypes.NewValue(tftypes.String, r.Path),
+			"type":                tftypes.NewValue(tftypes.String, r.Type),
+			"boot":                tftypes.NewValue(tftypes.Bool, r.Boot),
+			"size":                tftypes.NewValue(tftypes.Number, r.Size),
+			"logical_sectorsize":  tftypes.NewValue(tftypes.Number, r.LogicalSectorSize),
+			"physical_sectorsize": tftypes.NewValue(tftypes.Number, r.PhysicalSectorSize),
+			"iotype":              tftypes.NewValue(tftypes.String, r.IOType),
+			"serial":              tftypes.NewValue(tftypes.String, r.Serial),
+			"order":               tftypes.NewValue(tftypes.Number, r.Order),
+		}))
+	}
+	rawList := emptyBlockList(vmRawBlockType())
+	if len(rawValues) > 0 {
+		rawList = tftypes.NewValue(tftypes.List{ElementType: vmRawBlockType()}, rawValues)
+	}
+
+	// Build PCI block values
+	var pciValues []tftypes.Value
+	for _, pc := range pcis {
+		pciValues = append(pciValues, tftypes.NewValue(vmPCIBlockType(), map[string]tftypes.Value{
+			"device_id": tftypes.NewValue(tftypes.Number, pc.DeviceID),
+			"pptdev":    tftypes.NewValue(tftypes.String, pc.PPTDev),
+			"order":     tftypes.NewValue(tftypes.Number, pc.Order),
+		}))
+	}
+	pciList := emptyBlockList(vmPCIBlockType())
+	if len(pciValues) > 0 {
+		pciList = tftypes.NewValue(tftypes.List{ElementType: vmPCIBlockType()}, pciValues)
+	}
+
+	// Build USB block values
+	var usbValues []tftypes.Value
+	for _, u := range usbs {
+		usbValues = append(usbValues, tftypes.NewValue(vmUSBBlockType(), map[string]tftypes.Value{
+			"device_id":       tftypes.NewValue(tftypes.Number, u.DeviceID),
+			"controller_type": tftypes.NewValue(tftypes.String, u.ControllerType),
+			"device":          tftypes.NewValue(tftypes.String, u.Device),
+			"order":           tftypes.NewValue(tftypes.Number, u.Order),
+		}))
+	}
+	usbList := emptyBlockList(vmUSBBlockType())
+	if len(usbValues) > 0 {
+		usbList = tftypes.NewValue(tftypes.List{ElementType: vmUSBBlockType()}, usbValues)
+	}
+
+	values := map[string]tftypes.Value{
+		"id":                tftypes.NewValue(tftypes.String, p.ID),
+		"name":              tftypes.NewValue(tftypes.String, p.Name),
+		"description":       tftypes.NewValue(tftypes.String, p.Description),
+		"vcpus":             tftypes.NewValue(tftypes.Number, p.VCPUs),
+		"cores":             tftypes.NewValue(tftypes.Number, p.Cores),
+		"threads":           tftypes.NewValue(tftypes.Number, p.Threads),
+		"memory":            tftypes.NewValue(tftypes.Number, p.Memory),
+		"min_memory":        tftypes.NewValue(tftypes.Number, p.MinMemory),
+		"autostart":         tftypes.NewValue(tftypes.Bool, p.Autostart),
+		"time":              tftypes.NewValue(tftypes.String, p.Time),
+		"bootloader":        tftypes.NewValue(tftypes.String, p.Bootloader),
+		"bootloader_ovmf":   tftypes.NewValue(tftypes.String, p.BootloaderOVMF),
+		"cpu_mode":          tftypes.NewValue(tftypes.String, p.CPUMode),
+		"cpu_model":         tftypes.NewValue(tftypes.String, p.CPUModel),
+		"shutdown_timeout":  tftypes.NewValue(tftypes.Number, p.ShutdownTimeout),
+		"state":             tftypes.NewValue(tftypes.String, p.State),
+		"display_available": tftypes.NewValue(tftypes.Bool, p.DisplayAvailable),
+		"disk":              diskList,
+		"raw":               rawList,
+		"cdrom":             cdromList,
+		"nic":               nicList,
+		"display":           displayList,
+		"pci":               pciList,
+		"usb":               usbList,
+	}
+
+	return tftypes.NewValue(vmObjectType(), values)
+}
+
+// -- Create error path tests --
+
+func TestVMResource_Create_DeviceCreateError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return nil, errors.New("device creation failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.Disks = []vmDiskParams{{
+		DeviceID: nil, Path: "/dev/zvol/tank/vms/disk0", Type: "VIRTIO",
+		LogicalSectorSize: nil, PhysicalSectorSize: nil, IOType: "THREADS",
+		Serial: nil, Order: nil,
+	}}
+	planValue := createVMModelValue(p)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when device creation fails")
+	}
+}
+
+func TestVMResource_Create_StartError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.start":
+					return nil, errors.New("vm.start failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.State = "RUNNING"
+	planValue := createVMModelValue(p)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when vm.start fails")
+	}
+}
+
+func TestVMResource_Create_ReadBackError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.get_instance":
+					return nil, errors.New("read-back failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	planValue := createVMModelValue(defaultVMPlanParams())
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when read-back after create fails")
+	}
+}
+
+func TestVMResource_Create_DeviceQueryError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return nil, errors.New("device query failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	planValue := createVMModelValue(defaultVMPlanParams())
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when device query after create fails")
+	}
+}
+
+func TestVMResource_Create_WithCDROMDevice(t *testing.T) {
+	var deviceMethods []string
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				deviceMethods = append(deviceMethods, method)
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return json.RawMessage(`{"id": 101}`), nil
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(
+						map[string]any{"id": float64(101), "vm": float64(1), "order": float64(1000),
+							"attributes": map[string]any{"dtype": "CDROM", "path": "/mnt/tank/iso/test.iso"}},
+					), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.CDROMs = []vmCDROMParams{{
+		DeviceID: nil, Path: "/mnt/tank/iso/test.iso", Order: nil,
+	}}
+	planValue := createVMModelValue(p)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	foundDeviceCreate := false
+	for _, m := range deviceMethods {
+		if m == "vm.device.create" {
+			foundDeviceCreate = true
+		}
+	}
+	if !foundDeviceCreate {
+		t.Errorf("expected vm.device.create to be called for CDROM device")
+	}
+}
+
+func TestVMResource_Create_WithDisplayDevice(t *testing.T) {
+	var deviceCreateCalls int
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					deviceCreateCalls++
+					return json.RawMessage(`{"id": 101}`), nil
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(
+						map[string]any{"id": float64(101), "vm": float64(1), "order": float64(1000),
+							"attributes": map[string]any{"dtype": "DISPLAY", "type": "SPICE", "resolution": "1920x1080",
+								"bind": "0.0.0.0", "web": true, "port": float64(5900)}},
+					), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.Displays = []vmDisplayParams{{
+		DeviceID: nil, Type: "SPICE", Resolution: "1920x1080", Port: float64(5900),
+		WebPort: nil, Bind: "0.0.0.0", Wait: false, Password: nil, Web: true, Order: nil,
+	}}
+	planValue := createVMModelValue(p)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if deviceCreateCalls != 1 {
+		t.Errorf("expected 1 device create call, got %d", deviceCreateCalls)
+	}
+}
+
+func TestVMResource_Create_WithRawDevice(t *testing.T) {
+	var deviceCreateCalls int
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					deviceCreateCalls++
+					return json.RawMessage(`{"id": 101}`), nil
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(
+						map[string]any{"id": float64(101), "vm": float64(1), "order": float64(1000),
+							"attributes": map[string]any{"dtype": "RAW", "path": "/mnt/tank/vms/raw.img", "type": "AHCI", "boot": false}},
+					), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	planValue := createVMModelValueFull(p,
+		[]vmRawParams{{
+			DeviceID: nil, Path: "/mnt/tank/vms/raw.img", Type: "AHCI",
+			Boot: false, Size: nil, LogicalSectorSize: nil, PhysicalSectorSize: nil,
+			IOType: "THREADS", Serial: nil, Order: nil,
+		}},
+		nil, nil,
+	)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if deviceCreateCalls != 1 {
+		t.Errorf("expected 1 device create call for raw device, got %d", deviceCreateCalls)
+	}
+}
+
+func TestVMResource_Create_WithPCIDevice(t *testing.T) {
+	var deviceCreateCalls int
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					deviceCreateCalls++
+					return json.RawMessage(`{"id": 101}`), nil
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(
+						map[string]any{"id": float64(101), "vm": float64(1), "order": float64(1000),
+							"attributes": map[string]any{"dtype": "PCI", "pptdev": "0000:01:00.0"}},
+					), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	planValue := createVMModelValueFull(p, nil,
+		[]vmPCIParams{{DeviceID: nil, PPTDev: "0000:01:00.0", Order: nil}},
+		nil,
+	)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if deviceCreateCalls != 1 {
+		t.Errorf("expected 1 device create call for PCI device, got %d", deviceCreateCalls)
+	}
+}
+
+func TestVMResource_Create_WithUSBDevice(t *testing.T) {
+	var deviceCreateCalls int
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					deviceCreateCalls++
+					return json.RawMessage(`{"id": 101}`), nil
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(
+						map[string]any{"id": float64(101), "vm": float64(1), "order": float64(1000),
+							"attributes": map[string]any{"dtype": "USB", "controller_type": "qemu-xhci", "device": "usb_0001"}},
+					), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	planValue := createVMModelValueFull(p, nil, nil,
+		[]vmUSBParams{{DeviceID: nil, ControllerType: "qemu-xhci", Device: "usb_0001", Order: nil}},
+	)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if deviceCreateCalls != 1 {
+		t.Errorf("expected 1 device create call for USB device, got %d", deviceCreateCalls)
+	}
+}
+
+func TestVMResource_Create_RawDeviceCreateError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return nil, errors.New("raw device creation failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	planValue := createVMModelValueFull(p,
+		[]vmRawParams{{
+			DeviceID: nil, Path: "/mnt/tank/vms/raw.img", Type: "AHCI",
+			Boot: false, Size: nil, LogicalSectorSize: nil, PhysicalSectorSize: nil,
+			IOType: "THREADS", Serial: nil, Order: nil,
+		}},
+		nil, nil,
+	)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when raw device creation fails")
+	}
+}
+
+func TestVMResource_Create_CDROMDeviceCreateError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return nil, errors.New("cdrom device creation failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.CDROMs = []vmCDROMParams{{DeviceID: nil, Path: "/mnt/tank/iso/test.iso", Order: nil}}
+	planValue := createVMModelValue(p)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when CDROM device creation fails")
+	}
+}
+
+func TestVMResource_Create_NICDeviceCreateError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return nil, errors.New("nic device creation failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.NICs = []vmNICParams{{DeviceID: nil, Type: "VIRTIO", NICAttach: "br0", MAC: nil, TrustGuestRXFilters: false, Order: nil}}
+	planValue := createVMModelValue(p)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when NIC device creation fails")
+	}
+}
+
+func TestVMResource_Create_DisplayDeviceCreateError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return nil, errors.New("display device creation failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.Displays = []vmDisplayParams{{
+		DeviceID: nil, Type: "SPICE", Resolution: "1920x1080", Port: nil,
+		WebPort: nil, Bind: "0.0.0.0", Wait: false, Password: nil, Web: true, Order: nil,
+	}}
+	planValue := createVMModelValue(p)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when display device creation fails")
+	}
+}
+
+func TestVMResource_Create_PCIDeviceCreateError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return nil, errors.New("pci device creation failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	planValue := createVMModelValueFull(p, nil,
+		[]vmPCIParams{{DeviceID: nil, PPTDev: "0000:01:00.0", Order: nil}},
+		nil,
+	)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when PCI device creation fails")
+	}
+}
+
+func TestVMResource_Create_USBDeviceCreateError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.create":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return nil, errors.New("usb device creation failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	planValue := createVMModelValueFull(p, nil, nil,
+		[]vmUSBParams{{DeviceID: nil, ControllerType: "qemu-xhci", Device: "usb_0001", Order: nil}},
+	)
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when USB device creation fails")
+	}
+}
+
+// -- Read error path tests --
+
+func TestVMResource_Read_NonNotFoundError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return nil, errors.New("internal server error")
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.ID = "1"
+	stateValue := createVMModelValue(p)
+	req := resource.ReadRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for non-not-found API error")
+	}
+}
+
+func TestVMResource_Read_DeviceQueryError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return nil, errors.New("device query failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.ID = "1"
+	stateValue := createVMModelValue(p)
+	req := resource.ReadRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Read(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when device query fails during read")
+	}
+}
+
+// -- Update additional tests --
+
+func TestVMResource_Update_WithDeviceReconciliation(t *testing.T) {
+	var methods []string
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				methods = append(methods, method)
+				switch method {
+				case "vm.update":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.create":
+					return json.RawMessage(`{"id": 102}`), nil
+				case "vm.device.delete":
+					return json.RawMessage(`true`), nil
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(
+						map[string]any{"id": float64(102), "vm": float64(1), "order": float64(1000),
+							"attributes": map[string]any{"dtype": "DISK", "path": "/dev/zvol/tank/vms/new-disk", "type": "VIRTIO"}},
+					), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+
+	// State has a disk with device_id 50, plan has a new disk (no device_id)
+	stateParams := defaultVMPlanParams()
+	stateParams.ID = "1"
+	stateParams.Disks = []vmDiskParams{{
+		DeviceID: float64(50), Path: "/dev/zvol/tank/vms/old-disk", Type: "VIRTIO",
+		LogicalSectorSize: nil, PhysicalSectorSize: nil, IOType: "THREADS",
+		Serial: nil, Order: float64(1000),
+	}}
+	stateValue := createVMModelValue(stateParams)
+
+	planParams := defaultVMPlanParams()
+	planParams.ID = "1"
+	planParams.Disks = []vmDiskParams{{
+		DeviceID: nil, Path: "/dev/zvol/tank/vms/new-disk", Type: "VIRTIO",
+		LogicalSectorSize: nil, PhysicalSectorSize: nil, IOType: "THREADS",
+		Serial: nil, Order: nil,
+	}}
+	planValue := createVMModelValue(planParams)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	foundDelete := false
+	foundCreate := false
+	for _, m := range methods {
+		if m == "vm.device.delete" {
+			foundDelete = true
+		}
+		if m == "vm.device.create" {
+			foundCreate = true
+		}
+	}
+	if !foundDelete {
+		t.Error("expected vm.device.delete to be called for removed device")
+	}
+	if !foundCreate {
+		t.Error("expected vm.device.create to be called for new device")
+	}
+}
+
+func TestVMResource_Update_StateTransition(t *testing.T) {
+	var methods []string
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				methods = append(methods, method)
+				switch method {
+				case "vm.update":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(), nil
+				case "vm.start":
+					return json.RawMessage(`true`), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+
+	stateParams := defaultVMPlanParams()
+	stateParams.ID = "1"
+	stateParams.State = "STOPPED"
+	stateValue := createVMModelValue(stateParams)
+
+	planParams := defaultVMPlanParams()
+	planParams.ID = "1"
+	planParams.State = "RUNNING"
+	planValue := createVMModelValue(planParams)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	foundStart := false
+	for _, m := range methods {
+		if m == "vm.start" {
+			foundStart = true
+		}
+	}
+	if !foundStart {
+		t.Errorf("expected vm.start to be called for state transition, got: %v", methods)
+	}
+}
+
+func TestVMResource_Update_UpdateError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "vm.update" {
+					return nil, errors.New("update failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+
+	stateParams := defaultVMPlanParams()
+	stateParams.ID = "1"
+	stateParams.Memory = float64(2048)
+	stateValue := createVMModelValue(stateParams)
+
+	planParams := defaultVMPlanParams()
+	planParams.ID = "1"
+	planParams.Memory = float64(4096)
+	planValue := createVMModelValue(planParams)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when vm.update fails")
+	}
+}
+
+func TestVMResource_Update_DeviceReconcileError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.device.delete":
+					return nil, errors.New("device delete failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+
+	// State has a device, plan does not (triggers delete which will fail)
+	stateParams := defaultVMPlanParams()
+	stateParams.ID = "1"
+	stateParams.Disks = []vmDiskParams{{
+		DeviceID: float64(50), Path: "/dev/zvol/tank/vms/disk0", Type: "VIRTIO",
+		LogicalSectorSize: nil, PhysicalSectorSize: nil, IOType: "THREADS",
+		Serial: nil, Order: float64(1000),
+	}}
+	stateValue := createVMModelValue(stateParams)
+
+	planParams := defaultVMPlanParams()
+	planParams.ID = "1"
+	planValue := createVMModelValue(planParams)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when device reconciliation fails")
+	}
+}
+
+func TestVMResource_Update_StateTransitionQueryError(t *testing.T) {
+	callCount := 0
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.get_instance":
+					callCount++
+					// First call during state transition check
+					if callCount == 1 {
+						return nil, errors.New("query state failed")
+					}
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+
+	stateParams := defaultVMPlanParams()
+	stateParams.ID = "1"
+	stateParams.State = "STOPPED"
+	stateValue := createVMModelValue(stateParams)
+
+	planParams := defaultVMPlanParams()
+	planParams.ID = "1"
+	planParams.State = "RUNNING"
+	planValue := createVMModelValue(planParams)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when query VM state fails during state transition")
+	}
+}
+
+func TestVMResource_Update_StateReconcileError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(), nil
+				case "vm.start":
+					return nil, errors.New("start failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+
+	stateParams := defaultVMPlanParams()
+	stateParams.ID = "1"
+	stateParams.State = "STOPPED"
+	stateValue := createVMModelValue(stateParams)
+
+	planParams := defaultVMPlanParams()
+	planParams.ID = "1"
+	planParams.State = "RUNNING"
+	planValue := createVMModelValue(planParams)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when reconcileState fails during update")
+	}
+}
+
+func TestVMResource_Update_ReadBackError(t *testing.T) {
+	getInstanceCallCount := 0
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.get_instance":
+					getInstanceCallCount++
+					// The read-back call (after reconcileState or if no state change, the final read)
+					if getInstanceCallCount >= 2 {
+						return nil, errors.New("read-back failed")
+					}
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return mockVMDevicesResponse(), nil
+				case "vm.start":
+					return json.RawMessage(`true`), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+
+	stateParams := defaultVMPlanParams()
+	stateParams.ID = "1"
+	stateParams.State = "STOPPED"
+	stateValue := createVMModelValue(stateParams)
+
+	planParams := defaultVMPlanParams()
+	planParams.ID = "1"
+	planParams.State = "RUNNING"
+	planValue := createVMModelValue(planParams)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when read-back after update fails")
+	}
+}
+
+func TestVMResource_Update_DeviceQueryError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.device.query":
+					return nil, errors.New("device query failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+
+	stateParams := defaultVMPlanParams()
+	stateParams.ID = "1"
+	stateValue := createVMModelValue(stateParams)
+
+	planParams := defaultVMPlanParams()
+	planParams.ID = "1"
+	planValue := createVMModelValue(planParams)
+
+	req := resource.UpdateRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when device query fails after update")
+	}
+}
+
+// -- Delete error path tests --
+
+func TestVMResource_Delete_StatusError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "vm.get_instance" {
+					return nil, errors.New("internal server error")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.ID = "1"
+	stateValue := createVMModelValue(p)
+	req := resource.DeleteRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when vm.get_instance fails (non-not-found) during delete")
+	}
+}
+
+func TestVMResource_Delete_StopError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "vm.get_instance" {
+					return mockVMResponse(1, "test-vm", 2048, "RUNNING"), nil
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+			CallAndWaitFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return nil, errors.New("stop failed")
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.ID = "1"
+	p.State = "RUNNING"
+	stateValue := createVMModelValue(p)
+	req := resource.DeleteRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when vm.stop fails during delete")
+	}
+}
+
+func TestVMResource_Delete_DeleteError(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				switch method {
+				case "vm.get_instance":
+					return mockVMResponse(1, "test-vm", 2048, "STOPPED"), nil
+				case "vm.delete":
+					return nil, errors.New("delete failed")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.ID = "1"
+	stateValue := createVMModelValue(p)
+	req := resource.DeleteRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error when vm.delete fails")
+	}
+}
+
+func TestVMResource_Delete_AlreadyDeleted(t *testing.T) {
+	r := &VMResource{
+		client: &client.MockClient{
+			VersionVal: api.Version{Major: 24, Minor: 10},
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "vm.get_instance" {
+					return nil, errors.New("does not exist")
+				}
+				return nil, fmt.Errorf("unexpected method: %s", method)
+			},
+		},
+	}
+
+	schemaResp := getVMResourceSchema(t)
+	p := defaultVMPlanParams()
+	p.ID = "1"
+	stateValue := createVMModelValue(p)
+	req := resource.DeleteRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("expected no error when VM already deleted, got: %v", resp.Diagnostics)
+	}
+}
+
+// -- buildUpdateParams tests --
+
+func TestVMResource_buildUpdateParams(t *testing.T) {
+	r := &VMResource{}
+
+	t.Run("no changes returns empty", func(t *testing.T) {
+		data := &VMResourceModel{
+			Name:   types.StringValue("test-vm"),
+			Memory: types.Int64Value(2048),
+		}
+		params := r.buildUpdateParams(data, data)
+		if len(params) != 0 {
+			t.Errorf("expected empty params for no changes, got %v", params)
+		}
+	})
+
+	t.Run("all fields changed", func(t *testing.T) {
+		plan := &VMResourceModel{
+			Name:            types.StringValue("new-name"),
+			Description:     types.StringValue("new desc"),
+			VCPUs:           types.Int64Value(4),
+			Cores:           types.Int64Value(4),
+			Threads:         types.Int64Value(2),
+			Memory:          types.Int64Value(8192),
+			MinMemory:       types.Int64Value(4096),
+			Autostart:       types.BoolValue(false),
+			Time:            types.StringValue("UTC"),
+			Bootloader:      types.StringValue("UEFI_CSM"),
+			BootloaderOVMF:  types.StringValue("OVMF_CODE_TPM.fd"),
+			CPUMode:         types.StringValue("HOST-PASSTHROUGH"),
+			CPUModel:        types.StringValue("Haswell"),
+			ShutdownTimeout: types.Int64Value(120),
+		}
+		state := &VMResourceModel{
+			Name:            types.StringValue("test-vm"),
+			Description:     types.StringValue("old desc"),
+			VCPUs:           types.Int64Value(1),
+			Cores:           types.Int64Value(1),
+			Threads:         types.Int64Value(1),
+			Memory:          types.Int64Value(2048),
+			MinMemory:       types.Int64Null(),
+			Autostart:       types.BoolValue(true),
+			Time:            types.StringValue("LOCAL"),
+			Bootloader:      types.StringValue("UEFI"),
+			BootloaderOVMF:  types.StringValue("OVMF_CODE.fd"),
+			CPUMode:         types.StringValue("CUSTOM"),
+			CPUModel:        types.StringNull(),
+			ShutdownTimeout: types.Int64Value(90),
+		}
+		params := r.buildUpdateParams(plan, state)
+
+		expected := map[string]any{
+			"name":            "new-name",
+			"description":     "new desc",
+			"vcpus":           int64(4),
+			"cores":           int64(4),
+			"threads":         int64(2),
+			"memory":          int64(8192),
+			"min_memory":      int64(4096),
+			"autostart":       false,
+			"time":            "UTC",
+			"bootloader":      "UEFI_CSM",
+			"bootloader_ovmf": "OVMF_CODE_TPM.fd",
+			"cpu_mode":        "HOST-PASSTHROUGH",
+			"cpu_model":       "Haswell",
+			"shutdown_timeout": int64(120),
+		}
+		for k, v := range expected {
+			if params[k] != v {
+				t.Errorf("expected %s=%v, got %v", k, v, params[k])
+			}
+		}
+	})
+
+	t.Run("min_memory set to null", func(t *testing.T) {
+		plan := &VMResourceModel{
+			Name:      types.StringValue("test-vm"),
+			MinMemory: types.Int64Null(),
+		}
+		state := &VMResourceModel{
+			Name:      types.StringValue("test-vm"),
+			MinMemory: types.Int64Value(1024),
+		}
+		params := r.buildUpdateParams(plan, state)
+		val, ok := params["min_memory"]
+		if !ok {
+			t.Fatal("expected min_memory in params")
+		}
+		if val != nil {
+			t.Errorf("expected min_memory=nil, got %v", val)
+		}
+	})
+
+	t.Run("cpu_model set to null", func(t *testing.T) {
+		plan := &VMResourceModel{
+			Name:     types.StringValue("test-vm"),
+			CPUModel: types.StringNull(),
+		}
+		state := &VMResourceModel{
+			Name:     types.StringValue("test-vm"),
+			CPUModel: types.StringValue("Haswell"),
+		}
+		params := r.buildUpdateParams(plan, state)
+		val, ok := params["cpu_model"]
+		if !ok {
+			t.Fatal("expected cpu_model in params")
+		}
+		if val != nil {
+			t.Errorf("expected cpu_model=nil, got %v", val)
+		}
+	})
+}
+
+// -- buildRawDeviceParams tests --
+
+func TestVMResource_buildRawDeviceParams(t *testing.T) {
+	t.Run("basic", func(t *testing.T) {
+		raw := &VMRawModel{
+			Path:   types.StringValue("/mnt/tank/vms/raw.img"),
+			Type:   types.StringValue("AHCI"),
+			Boot:   types.BoolValue(false),
+			IOType: types.StringValue("THREADS"),
+		}
+		params := buildRawDeviceParams(raw, 1)
+		if params["vm"] != int64(1) {
+			t.Errorf("expected vm=1, got %v", params["vm"])
+		}
+		attrs, ok := params["attributes"].(map[string]any)
+		if !ok {
+			t.Fatal("expected attributes to be map[string]any")
+		}
+		if attrs["dtype"] != "RAW" {
+			t.Errorf("expected dtype=RAW, got %v", attrs["dtype"])
+		}
+		if attrs["path"] != "/mnt/tank/vms/raw.img" {
+			t.Errorf("expected path, got %v", attrs["path"])
+		}
+		if attrs["type"] != "AHCI" {
+			t.Errorf("expected type=AHCI, got %v", attrs["type"])
+		}
+		if attrs["boot"] != false {
+			t.Errorf("expected boot=false, got %v", attrs["boot"])
+		}
+	})
+
+	t.Run("with optional fields", func(t *testing.T) {
+		raw := &VMRawModel{
+			Path:               types.StringValue("/mnt/tank/vms/raw.img"),
+			Type:               types.StringValue("VIRTIO"),
+			Boot:               types.BoolValue(true),
+			Size:               types.Int64Value(10737418240),
+			LogicalSectorSize:  types.Int64Value(512),
+			PhysicalSectorSize: types.Int64Value(4096),
+			IOType:             types.StringValue("NATIVE"),
+			Serial:             types.StringValue("RAW001"),
+			Order:              types.Int64Value(1000),
+		}
+		params := buildRawDeviceParams(raw, 2)
+		attrs := params["attributes"].(map[string]any)
+		if attrs["size"] != int64(10737418240) {
+			t.Errorf("expected size=10737418240, got %v", attrs["size"])
+		}
+		if attrs["logical_sectorsize"] != int64(512) {
+			t.Errorf("expected logical_sectorsize=512, got %v", attrs["logical_sectorsize"])
+		}
+		if attrs["physical_sectorsize"] != int64(4096) {
+			t.Errorf("expected physical_sectorsize=4096, got %v", attrs["physical_sectorsize"])
+		}
+		if attrs["serial"] != "RAW001" {
+			t.Errorf("expected serial=RAW001, got %v", attrs["serial"])
+		}
+		if params["order"] != int64(1000) {
+			t.Errorf("expected order=1000, got %v", params["order"])
+		}
+	})
+}
+
+// -- buildDiskDeviceParams additional tests --
+
+func TestVMResource_buildDiskDeviceParams_WithOptionalFields(t *testing.T) {
+	disk := &VMDiskModel{
+		Path:               types.StringValue("/dev/zvol/tank/vms/disk0"),
+		Type:               types.StringValue("VIRTIO"),
+		IOType:             types.StringValue("THREADS"),
+		LogicalSectorSize:  types.Int64Value(512),
+		PhysicalSectorSize: types.Int64Value(4096),
+		Serial:             types.StringValue("DISK001"),
+		Order:              types.Int64Value(1000),
+	}
+	params := buildDiskDeviceParams(disk, 1)
+	attrs := params["attributes"].(map[string]any)
+
+	if attrs["logical_sectorsize"] != int64(512) {
+		t.Errorf("expected logical_sectorsize=512, got %v", attrs["logical_sectorsize"])
+	}
+	if attrs["physical_sectorsize"] != int64(4096) {
+		t.Errorf("expected physical_sectorsize=4096, got %v", attrs["physical_sectorsize"])
+	}
+	if attrs["serial"] != "DISK001" {
+		t.Errorf("expected serial=DISK001, got %v", attrs["serial"])
+	}
+	if params["order"] != int64(1000) {
+		t.Errorf("expected order=1000, got %v", params["order"])
+	}
+}
+
+// -- buildDisplayDeviceParams additional tests --
+
+func TestVMResource_buildDisplayDeviceParams_WithOptionalFields(t *testing.T) {
+	display := &VMDisplayModel{
+		Type:       types.StringValue("SPICE"),
+		Resolution: types.StringValue("1920x1080"),
+		Port:       types.Int64Value(5900),
+		WebPort:    types.Int64Value(5901),
+		Bind:       types.StringValue("0.0.0.0"),
+		Wait:       types.BoolValue(true),
+		Password:   types.StringValue("secret"),
+		Web:        types.BoolValue(true),
+		Order:      types.Int64Value(1000),
+	}
+	params := buildDisplayDeviceParams(display, 1)
+	attrs := params["attributes"].(map[string]any)
+
+	if attrs["port"] != int64(5900) {
+		t.Errorf("expected port=5900, got %v", attrs["port"])
+	}
+	if attrs["web_port"] != int64(5901) {
+		t.Errorf("expected web_port=5901, got %v", attrs["web_port"])
+	}
+	if attrs["password"] != "secret" {
+		t.Errorf("expected password=secret, got %v", attrs["password"])
+	}
+	if attrs["wait"] != true {
+		t.Errorf("expected wait=true, got %v", attrs["wait"])
+	}
+	if params["order"] != int64(1000) {
+		t.Errorf("expected order=1000, got %v", params["order"])
+	}
+}
+
+// -- Reconcile device type tests --
+
+func TestVMResource_reconcileRawDevices(t *testing.T) {
+	t.Run("create new raw device", func(t *testing.T) {
+		var createdDevices []map[string]any
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						p, _ := params.(map[string]any)
+						createdDevices = append(createdDevices, p)
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMRawModel{{
+			Path:   types.StringValue("/mnt/tank/vms/raw.img"),
+			Type:   types.StringValue("AHCI"),
+			Boot:   types.BoolValue(false),
+			IOType: types.StringValue("THREADS"),
+		}}
+
+		err := r.reconcileRawDevices(context.Background(), 1, plan, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(createdDevices) != 1 {
+			t.Fatalf("expected 1 device create, got %d", len(createdDevices))
+		}
+	})
+
+	t.Run("update changed raw device", func(t *testing.T) {
+		var updatedParams []any
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.update" {
+						updatedParams = append(updatedParams, params)
+						return json.RawMessage(`{"id": 50}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMRawModel{{
+			DeviceID: types.Int64Value(50),
+			Path:     types.StringValue("/mnt/tank/vms/raw.img"),
+			Type:     types.StringValue("VIRTIO"), // changed
+			Boot:     types.BoolValue(false),
+		}}
+		state := []VMRawModel{{
+			DeviceID: types.Int64Value(50),
+			Path:     types.StringValue("/mnt/tank/vms/raw.img"),
+			Type:     types.StringValue("AHCI"),
+			Boot:     types.BoolValue(false),
+		}}
+
+		err := r.reconcileRawDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(updatedParams) != 1 {
+			t.Fatalf("expected 1 device update, got %d", len(updatedParams))
+		}
+	})
+
+	t.Run("create error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("create failed")
+				},
+			},
+		}
+
+		plan := []VMRawModel{{
+			Path: types.StringValue("/mnt/tank/vms/raw.img"),
+			Type: types.StringValue("AHCI"),
+		}}
+		err := r.reconcileRawDevices(context.Background(), 1, plan, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("update error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("update failed")
+				},
+			},
+		}
+
+		plan := []VMRawModel{{
+			DeviceID: types.Int64Value(50),
+			Path:     types.StringValue("/mnt/tank/vms/raw.img"),
+			Type:     types.StringValue("VIRTIO"),
+			Boot:     types.BoolValue(true),
+		}}
+		state := []VMRawModel{{
+			DeviceID: types.Int64Value(50),
+			Path:     types.StringValue("/mnt/tank/vms/raw.img"),
+			Type:     types.StringValue("AHCI"),
+			Boot:     types.BoolValue(false),
+		}}
+		err := r.reconcileRawDevices(context.Background(), 1, plan, state)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestVMResource_reconcileCDROMDevices(t *testing.T) {
+	t.Run("create new cdrom", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMCDROMModel{{
+			Path: types.StringValue("/mnt/tank/iso/test.iso"),
+		}}
+		err := r.reconcileCDROMDevices(context.Background(), 1, plan, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Fatalf("expected 1 create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("update changed cdrom", func(t *testing.T) {
+		var updatedCount int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.update" {
+						updatedCount++
+						return json.RawMessage(`{"id": 50}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMCDROMModel{{
+			DeviceID: types.Int64Value(50),
+			Path:     types.StringValue("/mnt/tank/iso/new.iso"),
+		}}
+		state := []VMCDROMModel{{
+			DeviceID: types.Int64Value(50),
+			Path:     types.StringValue("/mnt/tank/iso/old.iso"),
+		}}
+		err := r.reconcileCDROMDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if updatedCount != 1 {
+			t.Fatalf("expected 1 update, got %d", updatedCount)
+		}
+	})
+
+	t.Run("create error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("create failed")
+				},
+			},
+		}
+
+		plan := []VMCDROMModel{{Path: types.StringValue("/mnt/tank/iso/test.iso")}}
+		err := r.reconcileCDROMDevices(context.Background(), 1, plan, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("update error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("update failed")
+				},
+			},
+		}
+
+		plan := []VMCDROMModel{{DeviceID: types.Int64Value(50), Path: types.StringValue("/mnt/tank/iso/new.iso")}}
+		state := []VMCDROMModel{{DeviceID: types.Int64Value(50), Path: types.StringValue("/mnt/tank/iso/old.iso")}}
+		err := r.reconcileCDROMDevices(context.Background(), 1, plan, state)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestVMResource_reconcileNICDevices(t *testing.T) {
+	t.Run("create new nic", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMNICModel{{
+			Type:      types.StringValue("VIRTIO"),
+			NICAttach: types.StringValue("br0"),
+		}}
+		err := r.reconcileNICDevices(context.Background(), 1, plan, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Fatalf("expected 1 create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("update changed nic", func(t *testing.T) {
+		var updatedCount int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.update" {
+						updatedCount++
+						return json.RawMessage(`{"id": 50}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMNICModel{{
+			DeviceID: types.Int64Value(50),
+			Type:     types.StringValue("E1000"), // changed
+			NICAttach: types.StringValue("br0"),
+		}}
+		state := []VMNICModel{{
+			DeviceID: types.Int64Value(50),
+			Type:     types.StringValue("VIRTIO"),
+			NICAttach: types.StringValue("br0"),
+		}}
+		err := r.reconcileNICDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if updatedCount != 1 {
+			t.Fatalf("expected 1 update, got %d", updatedCount)
+		}
+	})
+
+	t.Run("create error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("create failed")
+				},
+			},
+		}
+
+		plan := []VMNICModel{{Type: types.StringValue("VIRTIO"), NICAttach: types.StringValue("br0")}}
+		err := r.reconcileNICDevices(context.Background(), 1, plan, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("update error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("update failed")
+				},
+			},
+		}
+
+		plan := []VMNICModel{{DeviceID: types.Int64Value(50), Type: types.StringValue("E1000"), NICAttach: types.StringValue("br0")}}
+		state := []VMNICModel{{DeviceID: types.Int64Value(50), Type: types.StringValue("VIRTIO"), NICAttach: types.StringValue("br0")}}
+		err := r.reconcileNICDevices(context.Background(), 1, plan, state)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestVMResource_reconcileDisplayDevices(t *testing.T) {
+	t.Run("create new display", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMDisplayModel{{
+			Type:       types.StringValue("SPICE"),
+			Resolution: types.StringValue("1920x1080"),
+			Bind:       types.StringValue("0.0.0.0"),
+			Web:        types.BoolValue(true),
+		}}
+		err := r.reconcileDisplayDevices(context.Background(), 1, plan, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Fatalf("expected 1 create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("update changed display", func(t *testing.T) {
+		var updatedCount int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.update" {
+						updatedCount++
+						return json.RawMessage(`{"id": 50}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMDisplayModel{{
+			DeviceID:   types.Int64Value(50),
+			Type:       types.StringValue("SPICE"),
+			Resolution: types.StringValue("1920x1080"), // changed
+			Bind:       types.StringValue("0.0.0.0"),
+			Web:        types.BoolValue(true),
+			Wait:       types.BoolValue(false),
+			Port:       types.Int64Value(5900),
+			WebPort:    types.Int64Value(5901),
+		}}
+		state := []VMDisplayModel{{
+			DeviceID:   types.Int64Value(50),
+			Type:       types.StringValue("SPICE"),
+			Resolution: types.StringValue("1024x768"),
+			Bind:       types.StringValue("0.0.0.0"),
+			Web:        types.BoolValue(true),
+			Wait:       types.BoolValue(false),
+			Port:       types.Int64Value(5900),
+			WebPort:    types.Int64Value(5901),
+		}}
+		err := r.reconcileDisplayDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if updatedCount != 1 {
+			t.Fatalf("expected 1 update, got %d", updatedCount)
+		}
+	})
+
+	t.Run("create error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("create failed")
+				},
+			},
+		}
+
+		plan := []VMDisplayModel{{Type: types.StringValue("SPICE"), Resolution: types.StringValue("1024x768"), Bind: types.StringValue("0.0.0.0")}}
+		err := r.reconcileDisplayDevices(context.Background(), 1, plan, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("update error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("update failed")
+				},
+			},
+		}
+
+		plan := []VMDisplayModel{{DeviceID: types.Int64Value(50), Type: types.StringValue("SPICE"), Resolution: types.StringValue("1920x1080"), Bind: types.StringValue("0.0.0.0"), Web: types.BoolValue(true), Wait: types.BoolValue(false), Port: types.Int64Value(5900), WebPort: types.Int64Value(5901)}}
+		state := []VMDisplayModel{{DeviceID: types.Int64Value(50), Type: types.StringValue("SPICE"), Resolution: types.StringValue("1024x768"), Bind: types.StringValue("0.0.0.0"), Web: types.BoolValue(true), Wait: types.BoolValue(false), Port: types.Int64Value(5900), WebPort: types.Int64Value(5901)}}
+		err := r.reconcileDisplayDevices(context.Background(), 1, plan, state)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestVMResource_reconcilePCIDevices(t *testing.T) {
+	t.Run("create new pci", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMPCIModel{{PPTDev: types.StringValue("0000:01:00.0")}}
+		err := r.reconcilePCIDevices(context.Background(), 1, plan, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Fatalf("expected 1 create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("update changed pci", func(t *testing.T) {
+		var updatedCount int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.update" {
+						updatedCount++
+						return json.RawMessage(`{"id": 50}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMPCIModel{{DeviceID: types.Int64Value(50), PPTDev: types.StringValue("0000:02:00.0")}}
+		state := []VMPCIModel{{DeviceID: types.Int64Value(50), PPTDev: types.StringValue("0000:01:00.0")}}
+		err := r.reconcilePCIDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if updatedCount != 1 {
+			t.Fatalf("expected 1 update, got %d", updatedCount)
+		}
+	})
+
+	t.Run("create error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("create failed")
+				},
+			},
+		}
+
+		plan := []VMPCIModel{{PPTDev: types.StringValue("0000:01:00.0")}}
+		err := r.reconcilePCIDevices(context.Background(), 1, plan, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("update error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("update failed")
+				},
+			},
+		}
+
+		plan := []VMPCIModel{{DeviceID: types.Int64Value(50), PPTDev: types.StringValue("0000:02:00.0")}}
+		state := []VMPCIModel{{DeviceID: types.Int64Value(50), PPTDev: types.StringValue("0000:01:00.0")}}
+		err := r.reconcilePCIDevices(context.Background(), 1, plan, state)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+func TestVMResource_reconcileUSBDevices(t *testing.T) {
+	t.Run("create new usb", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMUSBModel{{ControllerType: types.StringValue("qemu-xhci"), Device: types.StringValue("usb_0001")}}
+		err := r.reconcileUSBDevices(context.Background(), 1, plan, nil)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Fatalf("expected 1 create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("update changed usb", func(t *testing.T) {
+		var updatedCount int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.update" {
+						updatedCount++
+						return json.RawMessage(`{"id": 50}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := []VMUSBModel{{DeviceID: types.Int64Value(50), ControllerType: types.StringValue("nec-xhci"), Device: types.StringValue("usb_0001")}}
+		state := []VMUSBModel{{DeviceID: types.Int64Value(50), ControllerType: types.StringValue("qemu-xhci"), Device: types.StringValue("usb_0001")}}
+		err := r.reconcileUSBDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if updatedCount != 1 {
+			t.Fatalf("expected 1 update, got %d", updatedCount)
+		}
+	})
+
+	t.Run("create error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("create failed")
+				},
+			},
+		}
+
+		plan := []VMUSBModel{{ControllerType: types.StringValue("qemu-xhci"), Device: types.StringValue("usb_0001")}}
+		err := r.reconcileUSBDevices(context.Background(), 1, plan, nil)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+
+	t.Run("update error", func(t *testing.T) {
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					return nil, errors.New("update failed")
+				},
+			},
+		}
+
+		plan := []VMUSBModel{{DeviceID: types.Int64Value(50), ControllerType: types.StringValue("nec-xhci"), Device: types.StringValue("usb_0001")}}
+		state := []VMUSBModel{{DeviceID: types.Int64Value(50), ControllerType: types.StringValue("qemu-xhci"), Device: types.StringValue("usb_0001")}}
+		err := r.reconcileUSBDevices(context.Background(), 1, plan, state)
+		if err == nil {
+			t.Fatal("expected error")
+		}
+	})
+}
+
+// -- Equality function tests --
+
+func TestVMResource_rawEqual(t *testing.T) {
+	a := VMRawModel{
+		Path: types.StringValue("/mnt/tank/vms/raw.img"),
+		Type: types.StringValue("AHCI"),
+		Boot: types.BoolValue(false),
+		Size: types.Int64Value(1024),
+	}
+	b := a
+
+	if !rawEqual(a, b) {
+		t.Error("expected equal raw models to return true")
+	}
+
+	c := a
+	c.Path = types.StringValue("/mnt/tank/vms/other.img")
+	if rawEqual(a, c) {
+		t.Error("expected different path to return false")
+	}
+
+	d := a
+	d.Type = types.StringValue("VIRTIO")
+	if rawEqual(a, d) {
+		t.Error("expected different type to return false")
+	}
+
+	e := a
+	e.Boot = types.BoolValue(true)
+	if rawEqual(a, e) {
+		t.Error("expected different boot to return false")
+	}
+
+	f := a
+	f.Size = types.Int64Value(2048)
+	if rawEqual(a, f) {
+		t.Error("expected different size to return false")
+	}
+}
+
+func TestVMResource_nicEqual(t *testing.T) {
+	a := VMNICModel{
+		Type:                types.StringValue("VIRTIO"),
+		NICAttach:           types.StringValue("br0"),
+		MAC:                 types.StringValue("00:aa:bb:cc:dd:ee"),
+		TrustGuestRXFilters: types.BoolValue(false),
+	}
+	b := a
+
+	if !nicEqual(a, b) {
+		t.Error("expected equal nic models to return true")
+	}
+
+	c := a
+	c.Type = types.StringValue("E1000")
+	if nicEqual(a, c) {
+		t.Error("expected different type to return false")
+	}
+
+	d := a
+	d.NICAttach = types.StringValue("br1")
+	if nicEqual(a, d) {
+		t.Error("expected different nic_attach to return false")
+	}
+
+	e := a
+	e.MAC = types.StringValue("ff:ff:ff:ff:ff:ff")
+	if nicEqual(a, e) {
+		t.Error("expected different mac to return false")
+	}
+
+	f := a
+	f.TrustGuestRXFilters = types.BoolValue(true)
+	if nicEqual(a, f) {
+		t.Error("expected different trust_guest_rx_filters to return false")
+	}
+}
+
+func TestVMResource_displayEqual(t *testing.T) {
+	a := VMDisplayModel{
+		Type:       types.StringValue("SPICE"),
+		Resolution: types.StringValue("1920x1080"),
+		Bind:       types.StringValue("0.0.0.0"),
+		Web:        types.BoolValue(true),
+		Wait:       types.BoolValue(false),
+		Port:       types.Int64Value(5900),
+		WebPort:    types.Int64Value(5901),
+	}
+	b := a
+
+	if !displayEqual(a, b) {
+		t.Error("expected equal display models to return true")
+	}
+
+	c := a
+	c.Resolution = types.StringValue("1024x768")
+	if displayEqual(a, c) {
+		t.Error("expected different resolution to return false")
+	}
+
+	d := a
+	d.Port = types.Int64Value(5910)
+	if displayEqual(a, d) {
+		t.Error("expected different port to return false")
+	}
+
+	e := a
+	e.WebPort = types.Int64Value(5911)
+	if displayEqual(a, e) {
+		t.Error("expected different web_port to return false")
+	}
+
+	f := a
+	f.Web = types.BoolValue(false)
+	if displayEqual(a, f) {
+		t.Error("expected different web to return false")
+	}
+
+	g := a
+	g.Wait = types.BoolValue(true)
+	if displayEqual(a, g) {
+		t.Error("expected different wait to return false")
+	}
+
+	h := a
+	h.Bind = types.StringValue("127.0.0.1")
+	if displayEqual(a, h) {
+		t.Error("expected different bind to return false")
+	}
+
+	i := a
+	i.Type = types.StringValue("VNC")
+	if displayEqual(a, i) {
+		t.Error("expected different type to return false")
+	}
+}
+
+func TestVMResource_usbEqual(t *testing.T) {
+	a := VMUSBModel{
+		ControllerType: types.StringValue("qemu-xhci"),
+		Device:         types.StringValue("usb_0001"),
+	}
+	b := a
+
+	if !usbEqual(a, b) {
+		t.Error("expected equal usb models to return true")
+	}
+
+	c := a
+	c.ControllerType = types.StringValue("nec-xhci")
+	if usbEqual(a, c) {
+		t.Error("expected different controller_type to return false")
+	}
+
+	d := a
+	d.Device = types.StringValue("usb_0002")
+	if usbEqual(a, d) {
+		t.Error("expected different device to return false")
+	}
+}
+
+// -- collectDeviceIDs tests --
+
+func TestVMResource_collectDeviceIDs_AllTypes(t *testing.T) {
+	ids := make(map[int64]bool)
+	data := &VMResourceModel{
+		Disks: []VMDiskModel{
+			{DeviceID: types.Int64Value(10)},
+			{DeviceID: types.Int64Value(11)},
+		},
+		Raws: []VMRawModel{
+			{DeviceID: types.Int64Value(20)},
+		},
+		CDROMs: []VMCDROMModel{
+			{DeviceID: types.Int64Value(30)},
+		},
+		NICs: []VMNICModel{
+			{DeviceID: types.Int64Value(40)},
+		},
+		Displays: []VMDisplayModel{
+			{DeviceID: types.Int64Value(50)},
+		},
+		PCIs: []VMPCIModel{
+			{DeviceID: types.Int64Value(60)},
+		},
+		USBs: []VMUSBModel{
+			{DeviceID: types.Int64Value(70)},
+		},
+	}
+
+	collectDeviceIDs(ids, data)
+
+	expectedIDs := []int64{10, 11, 20, 30, 40, 50, 60, 70}
+	for _, id := range expectedIDs {
+		if !ids[id] {
+			t.Errorf("expected device ID %d to be collected", id)
+		}
+	}
+	if len(ids) != len(expectedIDs) {
+		t.Errorf("expected %d IDs, got %d", len(expectedIDs), len(ids))
+	}
+}
+
+func TestVMResource_collectDeviceIDs_SkipsNullAndUnknown(t *testing.T) {
+	ids := make(map[int64]bool)
+	data := &VMResourceModel{
+		Disks: []VMDiskModel{
+			{DeviceID: types.Int64Null()},
+			{DeviceID: types.Int64Unknown()},
+			{DeviceID: types.Int64Value(10)},
+		},
+	}
+
+	collectDeviceIDs(ids, data)
+
+	if len(ids) != 1 {
+		t.Errorf("expected 1 ID, got %d", len(ids))
+	}
+	if !ids[10] {
+		t.Error("expected device ID 10 to be collected")
+	}
+}
+
+// -- intAttrFromMap tests --
+
+func TestVMResource_intAttrFromMap(t *testing.T) {
+	t.Run("float64 value", func(t *testing.T) {
+		m := map[string]any{"port": float64(5900)}
+		result := intAttrFromMap(m, "port")
+		if result.IsNull() {
+			t.Fatal("expected non-null result for float64")
+		}
+		if result.ValueInt64() != 5900 {
+			t.Errorf("expected 5900, got %d", result.ValueInt64())
+		}
+	})
+
+	t.Run("int64 value", func(t *testing.T) {
+		m := map[string]any{"port": int64(5900)}
+		result := intAttrFromMap(m, "port")
+		if result.IsNull() {
+			t.Fatal("expected non-null result for int64")
+		}
+		if result.ValueInt64() != 5900 {
+			t.Errorf("expected 5900, got %d", result.ValueInt64())
+		}
+	})
+
+	t.Run("json.Number value", func(t *testing.T) {
+		m := map[string]any{"port": json.Number("5900")}
+		result := intAttrFromMap(m, "port")
+		if result.IsNull() {
+			t.Fatal("expected non-null result for json.Number")
+		}
+		if result.ValueInt64() != 5900 {
+			t.Errorf("expected 5900, got %d", result.ValueInt64())
+		}
+	})
+
+	t.Run("nil value", func(t *testing.T) {
+		m := map[string]any{"port": nil}
+		result := intAttrFromMap(m, "port")
+		if !result.IsNull() {
+			t.Error("expected null result for nil value")
+		}
+	})
+
+	t.Run("missing key", func(t *testing.T) {
+		m := map[string]any{}
+		result := intAttrFromMap(m, "port")
+		if !result.IsNull() {
+			t.Error("expected null result for missing key")
+		}
+	})
+
+	t.Run("unsupported type", func(t *testing.T) {
+		m := map[string]any{"port": "not-a-number"}
+		result := intAttrFromMap(m, "port")
+		if !result.IsNull() {
+			t.Error("expected null result for unsupported type")
+		}
+	})
+}
+
+// -- reconcileDevices dispatching to non-disk types --
+
+func TestVMResource_reconcileDevices_NonDiskTypes(t *testing.T) {
+	t.Run("dispatches to raw reconciler", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := &VMResourceModel{
+			Raws: []VMRawModel{{
+				Path:   types.StringValue("/mnt/tank/vms/raw.img"),
+				Type:   types.StringValue("AHCI"),
+				Boot:   types.BoolValue(false),
+				IOType: types.StringValue("THREADS"),
+			}},
+		}
+		state := &VMResourceModel{}
+
+		err := r.reconcileDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Errorf("expected 1 raw device create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("dispatches to cdrom reconciler", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := &VMResourceModel{
+			CDROMs: []VMCDROMModel{{Path: types.StringValue("/mnt/tank/iso/test.iso")}},
+		}
+		state := &VMResourceModel{}
+
+		err := r.reconcileDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Errorf("expected 1 cdrom device create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("dispatches to nic reconciler", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := &VMResourceModel{
+			NICs: []VMNICModel{{Type: types.StringValue("VIRTIO"), NICAttach: types.StringValue("br0")}},
+		}
+		state := &VMResourceModel{}
+
+		err := r.reconcileDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Errorf("expected 1 nic device create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("dispatches to display reconciler", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := &VMResourceModel{
+			Displays: []VMDisplayModel{{Type: types.StringValue("SPICE"), Resolution: types.StringValue("1024x768"), Bind: types.StringValue("0.0.0.0")}},
+		}
+		state := &VMResourceModel{}
+
+		err := r.reconcileDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Errorf("expected 1 display device create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("dispatches to pci reconciler", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := &VMResourceModel{
+			PCIs: []VMPCIModel{{PPTDev: types.StringValue("0000:01:00.0")}},
+		}
+		state := &VMResourceModel{}
+
+		err := r.reconcileDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Errorf("expected 1 pci device create, got %d", createdDevices)
+		}
+	})
+
+	t.Run("dispatches to usb reconciler", func(t *testing.T) {
+		var createdDevices int
+		r := &VMResource{
+			client: &client.MockClient{
+				CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+					if method == "vm.device.create" {
+						createdDevices++
+						return json.RawMessage(`{"id": 100}`), nil
+					}
+					return nil, fmt.Errorf("unexpected method: %s", method)
+				},
+			},
+		}
+
+		plan := &VMResourceModel{
+			USBs: []VMUSBModel{{ControllerType: types.StringValue("qemu-xhci"), Device: types.StringValue("usb_0001")}},
+		}
+		state := &VMResourceModel{}
+
+		err := r.reconcileDevices(context.Background(), 1, plan, state)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if createdDevices != 1 {
+			t.Errorf("expected 1 usb device create, got %d", createdDevices)
+		}
+	})
+}
+
+// -- diskEqual tests --
+
+func TestVMResource_diskEqual(t *testing.T) {
+	a := VMDiskModel{
+		Path:               types.StringValue("/dev/zvol/tank/vms/disk0"),
+		Type:               types.StringValue("VIRTIO"),
+		LogicalSectorSize:  types.Int64Null(),
+		PhysicalSectorSize: types.Int64Null(),
+		IOType:             types.StringValue("THREADS"),
+		Serial:             types.StringNull(),
+	}
+	b := a
+
+	if !diskEqual(a, b) {
+		t.Error("expected equal disk models to return true")
+	}
+
+	c := a
+	c.Path = types.StringValue("/dev/zvol/tank/vms/disk1")
+	if diskEqual(a, c) {
+		t.Error("expected different path to return false")
+	}
+
+	d := a
+	d.IOType = types.StringValue("NATIVE")
+	if diskEqual(a, d) {
+		t.Error("expected different iotype to return false")
+	}
+
+	e := a
+	e.LogicalSectorSize = types.Int64Value(512)
+	if diskEqual(a, e) {
+		t.Error("expected different logical_sectorsize to return false")
+	}
+}
