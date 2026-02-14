@@ -462,7 +462,7 @@ func (r *VMResource) Schema(ctx context.Context, req resource.SchemaRequest, res
 							Description: "Bind address. Defaults to 127.0.0.1.",
 						},
 						"wait":     schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(false), Description: "Wait for client before booting. Defaults to false."},
-						"password": schema.StringAttribute{Optional: true, Sensitive: true, Description: "Connection password."},
+						"password": schema.StringAttribute{Required: true, Sensitive: true, Description: "Connection password. Required by TrueNAS for display devices."},
 						"web":      schema.BoolAttribute{Optional: true, Computed: true, Default: booldefault.StaticBool(true), Description: "Enable web client. Defaults to true."},
 						"order":    schema.Int64Attribute{Optional: true, Computed: true, Description: "Device boot/load order."},
 					},
