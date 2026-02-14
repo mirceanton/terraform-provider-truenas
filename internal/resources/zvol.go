@@ -239,11 +239,91 @@ func (r *ZvolResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 }
 
 func (r *ZvolResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Update is not yet implemented")
+	var plan, state ZvolResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &plan)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	updateParams := map[string]any{}
+
+	// Check volsize change
+	if !plan.Volsize.Equal(state.Volsize) {
+		volsizeBytes, err := api.ParseSize(plan.Volsize.ValueString())
+		if err != nil {
+			resp.Diagnostics.AddError("Invalid Volsize", fmt.Sprintf("Unable to parse volsize %q: %s", plan.Volsize.ValueString(), err.Error()))
+			return
+		}
+		updateParams["volsize"] = volsizeBytes
+	}
+
+	if !plan.Compression.Equal(state.Compression) && !plan.Compression.IsNull() {
+		updateParams["compression"] = plan.Compression.ValueString()
+	}
+
+	if !plan.Comments.Equal(state.Comments) {
+		if plan.Comments.IsNull() {
+			updateParams["comments"] = ""
+		} else {
+			updateParams["comments"] = plan.Comments.ValueString()
+		}
+	}
+
+	if !plan.ForceSize.IsNull() && !plan.ForceSize.IsUnknown() && plan.ForceSize.ValueBool() {
+		updateParams["force_size"] = true
+	}
+
+	zvolID := state.ID.ValueString()
+
+	if len(updateParams) > 0 {
+		_, err := r.client.Call(ctx, "pool.dataset.update", []any{zvolID, updateParams})
+		if err != nil {
+			resp.Diagnostics.AddError(
+				"Unable to Update Zvol",
+				fmt.Sprintf("Unable to update zvol %q: %s", zvolID, err.Error()),
+			)
+			return
+		}
+	}
+
+	// Re-read to get current state
+	raw, err := queryPoolDataset(ctx, r.client, zvolID)
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to Read Zvol After Update", fmt.Sprintf("Unable to read zvol %q: %s", zvolID, err.Error()))
+		return
+	}
+	if raw == nil {
+		resp.Diagnostics.AddError("Zvol Not Found After Update", fmt.Sprintf("Zvol %q not found after update", zvolID))
+		return
+	}
+
+	var zvol zvolQueryResponse
+	if err := json.Unmarshal(raw, &zvol); err != nil {
+		resp.Diagnostics.AddError("Unable to Parse Response", fmt.Sprintf("Unable to parse zvol response: %s", err.Error()))
+		return
+	}
+
+	mapZvolToModel(&zvol, &plan)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &plan)...)
 }
 
 func (r *ZvolResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Delete is not yet implemented")
+	var data ZvolResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	zvolID := data.ID.ValueString()
+	recursive := !data.ForceDestroy.IsNull() && data.ForceDestroy.ValueBool()
+
+	if err := deletePoolDataset(ctx, r.client, zvolID, recursive); err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Delete Zvol",
+			fmt.Sprintf("Unable to delete zvol %q: %s", zvolID, err.Error()),
+		)
+	}
 }
 
 func (r *ZvolResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {

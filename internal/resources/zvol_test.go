@@ -282,6 +282,255 @@ func TestZvolResource_Read_NotFound(t *testing.T) {
 	}
 }
 
+func TestZvolResource_Update_Volsize(t *testing.T) {
+	var updateID string
+	var updateParams map[string]any
+
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.dataset.update" {
+					args := params.([]any)
+					updateID = args[0].(string)
+					updateParams = args[1].(map[string]any)
+					return json.RawMessage(`{"id":"tank/myvol"}`), nil
+				}
+				if method == "pool.dataset.query" {
+					return json.RawMessage(mockZvolQueryResponse("tank/myvol", "lz4", "", 21474836480, "16K", false)), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+
+	stateP := defaultZvolPlanParams()
+	stateP.ID = strPtr("tank/myvol")
+	stateP.Volblocksize = strPtr("16K")
+	stateP.Compression = strPtr("lz4")
+	stateValue := createZvolModelValue(stateP)
+
+	planP := defaultZvolPlanParams()
+	planP.ID = strPtr("tank/myvol")
+	planP.Volsize = strPtr("21474836480") // doubled
+	planP.Volblocksize = strPtr("16K")
+	planP.Compression = strPtr("lz4")
+	planValue := createZvolModelValue(planP)
+
+	req := resource.UpdateRequest{
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if updateID != "tank/myvol" {
+		t.Errorf("expected update ID 'tank/myvol', got %q", updateID)
+	}
+	if updateParams["volsize"] != int64(21474836480) {
+		t.Errorf("expected volsize 21474836480, got %v", updateParams["volsize"])
+	}
+}
+
+func TestZvolResource_Update_NoChanges(t *testing.T) {
+	var updateCalled bool
+
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.dataset.update" {
+					updateCalled = true
+					return json.RawMessage(`{"id":"tank/myvol"}`), nil
+				}
+				if method == "pool.dataset.query" {
+					return json.RawMessage(mockZvolQueryResponse("tank/myvol", "lz4", "", 10737418240, "16K", false)), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+
+	p := defaultZvolPlanParams()
+	p.ID = strPtr("tank/myvol")
+	p.Volblocksize = strPtr("16K")
+	p.Compression = strPtr("lz4")
+	value := createZvolModelValue(p)
+
+	req := resource.UpdateRequest{
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: value},
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: value},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if updateCalled {
+		t.Error("expected pool.dataset.update to NOT be called when nothing changed")
+	}
+}
+
+func TestZvolResource_Update_APIError(t *testing.T) {
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.dataset.update" {
+					return nil, errors.New("update failed")
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+
+	stateP := defaultZvolPlanParams()
+	stateP.ID = strPtr("tank/myvol")
+	stateP.Volblocksize = strPtr("16K")
+	stateP.Compression = strPtr("lz4")
+	stateValue := createZvolModelValue(stateP)
+
+	planP := defaultZvolPlanParams()
+	planP.ID = strPtr("tank/myvol")
+	planP.Volsize = strPtr("21474836480")
+	planP.Volblocksize = strPtr("16K")
+	planP.Compression = strPtr("lz4")
+	planValue := createZvolModelValue(planP)
+
+	req := resource.UpdateRequest{
+		Plan:  tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.UpdateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Update(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for update API failure")
+	}
+}
+
+func TestZvolResource_Delete_Basic(t *testing.T) {
+	var deleteCalled bool
+	var deleteID string
+
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.dataset.delete" {
+					deleteCalled = true
+					deleteID = params.(string)
+					return json.RawMessage(`true`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+	p := defaultZvolPlanParams()
+	p.ID = strPtr("tank/myvol")
+	stateValue := createZvolModelValue(p)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if !deleteCalled {
+		t.Fatal("expected pool.dataset.delete to be called")
+	}
+	if deleteID != "tank/myvol" {
+		t.Errorf("expected delete ID 'tank/myvol', got %q", deleteID)
+	}
+}
+
+func TestZvolResource_Delete_ForceDestroy(t *testing.T) {
+	var deleteParams []any
+
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.dataset.delete" {
+					deleteParams = params.([]any)
+					return json.RawMessage(`true`), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+	p := defaultZvolPlanParams()
+	p.ID = strPtr("tank/myvol")
+	p.ForceDestroy = boolPtr(true)
+	stateValue := createZvolModelValue(p)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if len(deleteParams) != 2 {
+		t.Fatalf("expected 2 delete params (id + options), got %d", len(deleteParams))
+	}
+	opts := deleteParams[1].(map[string]bool)
+	if !opts["recursive"] {
+		t.Error("expected recursive=true for force_destroy")
+	}
+}
+
+func TestZvolResource_Delete_APIError(t *testing.T) {
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return nil, errors.New("zvol is busy")
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+	p := defaultZvolPlanParams()
+	p.ID = strPtr("tank/myvol")
+	stateValue := createZvolModelValue(p)
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for delete API failure")
+	}
+}
+
 // -- Test helpers --
 
 func getZvolResourceSchema(t *testing.T) resource.SchemaResponse {
