@@ -81,6 +81,7 @@ type VMRawModel struct {
 	Path               types.String `tfsdk:"path"`
 	Type               types.String `tfsdk:"type"`
 	Boot               types.Bool   `tfsdk:"boot"`
+	Exists             types.Bool   `tfsdk:"exists"`
 	Size               types.Int64  `tfsdk:"size"`
 	LogicalSectorSize  types.Int64  `tfsdk:"logical_sectorsize"`
 	PhysicalSectorSize types.Int64  `tfsdk:"physical_sectorsize"`
@@ -390,6 +391,10 @@ func (r *VMResource) Schema(ctx context.Context, req resource.SchemaRequest, res
 						"boot": schema.BoolAttribute{
 							Optional: true, Computed: true, Default: booldefault.StaticBool(false),
 							Description: "Bootable device. Defaults to false.",
+						},
+						"exists": schema.BoolAttribute{
+							Optional:    true,
+							Description: "Set to true when the file at path already exists. When false (default), the API creates the raw file.",
 						},
 						"size":                schema.Int64Attribute{Optional: true, Description: "File size in bytes (for creation)."},
 						"logical_sectorsize":  schema.Int64Attribute{Optional: true, Description: "Logical sector size: 512 or 4096.", Validators: []validator.Int64{int64validator.OneOf(512, 4096)}},

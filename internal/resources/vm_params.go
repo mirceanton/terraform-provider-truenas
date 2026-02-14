@@ -151,6 +151,9 @@ func buildRawDeviceParams(raw *VMRawModel, vmID int64) map[string]any {
 	if !raw.Boot.IsNull() && !raw.Boot.IsUnknown() {
 		attrs["boot"] = raw.Boot.ValueBool()
 	}
+	if !raw.Exists.IsNull() && !raw.Exists.IsUnknown() {
+		attrs["exists"] = raw.Exists.ValueBool()
+	}
 	if !raw.Size.IsNull() {
 		attrs["size"] = raw.Size.ValueInt64()
 	}

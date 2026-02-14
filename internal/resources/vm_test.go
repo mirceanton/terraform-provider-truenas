@@ -50,6 +50,7 @@ func vmRawBlockType() tftypes.Object {
 		"path":                tftypes.String,
 		"type":                tftypes.String,
 		"boot":                tftypes.Bool,
+		"exists":              tftypes.Bool,
 		"size":                tftypes.Number,
 		"logical_sectorsize":  tftypes.Number,
 		"physical_sectorsize": tftypes.Number,
@@ -1477,6 +1478,7 @@ type vmRawParams struct {
 	Path               interface{}
 	Type               interface{}
 	Boot               interface{}
+	Exists             interface{}
 	Size               interface{}
 	LogicalSectorSize  interface{}
 	PhysicalSectorSize interface{}
@@ -1581,6 +1583,7 @@ func createVMModelValueFull(p vmModelParams, raws []vmRawParams, pcis []vmPCIPar
 			"path":                tftypes.NewValue(tftypes.String, r.Path),
 			"type":                tftypes.NewValue(tftypes.String, r.Type),
 			"boot":                tftypes.NewValue(tftypes.Bool, r.Boot),
+			"exists":              tftypes.NewValue(tftypes.Bool, r.Exists),
 			"size":                tftypes.NewValue(tftypes.Number, r.Size),
 			"logical_sectorsize":  tftypes.NewValue(tftypes.Number, r.LogicalSectorSize),
 			"physical_sectorsize": tftypes.NewValue(tftypes.Number, r.PhysicalSectorSize),
@@ -2979,6 +2982,21 @@ func TestVMResource_buildRawDeviceParams(t *testing.T) {
 		}
 		if attrs["boot"] != false {
 			t.Errorf("expected boot=false, got %v", attrs["boot"])
+		}
+	})
+
+	t.Run("with exists true", func(t *testing.T) {
+		raw := &VMRawModel{
+			Path:   types.StringValue("/dev/zvol/tank/vms/disk0"),
+			Type:   types.StringValue("AHCI"),
+			Boot:   types.BoolValue(false),
+			Exists: types.BoolValue(true),
+			IOType: types.StringValue("THREADS"),
+		}
+		params := buildRawDeviceParams(raw, 1)
+		attrs := params["attributes"].(map[string]any)
+		if attrs["exists"] != true {
+			t.Errorf("expected exists=true, got %v", attrs["exists"])
 		}
 	})
 

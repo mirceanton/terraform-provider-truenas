@@ -125,6 +125,7 @@ func mapRawDevice(dev vmDeviceAPIResponse) VMRawModel {
 	m.IOType = stringAttrFromMap(dev.Attributes, "iotype")
 	m.Serial = stringAttrFromMap(dev.Attributes, "serial")
 	m.Boot = boolAttrFromMap(dev.Attributes, "boot")
+	m.Exists = boolAttrFromMap(dev.Attributes, "exists")
 	m.Size = intAttrFromMap(dev.Attributes, "size")
 	m.LogicalSectorSize = intAttrFromMap(dev.Attributes, "logical_sectorsize")
 	m.PhysicalSectorSize = intAttrFromMap(dev.Attributes, "physical_sectorsize")
