@@ -2,8 +2,10 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
+	"github.com/deevus/terraform-provider-truenas/internal/api"
 	"github.com/deevus/terraform-provider-truenas/internal/client"
 	customtypes "github.com/deevus/terraform-provider-truenas/internal/types"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -127,11 +129,113 @@ func (r *ZvolResource) Configure(ctx context.Context, req resource.ConfigureRequ
 }
 
 func (r *ZvolResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Create is not yet implemented")
+	var data ZvolResourceModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	fullName := poolDatasetFullName(data.Pool, data.Path, data.Parent, types.StringNull())
+	if fullName == "" {
+		resp.Diagnostics.AddError(
+			"Invalid Configuration",
+			"Either 'pool' with 'path', or 'parent' with 'path' must be provided.",
+		)
+		return
+	}
+
+	// Parse volsize
+	volsizeBytes, err := api.ParseSize(data.Volsize.ValueString())
+	if err != nil {
+		resp.Diagnostics.AddError("Invalid Volsize", fmt.Sprintf("Unable to parse volsize %q: %s", data.Volsize.ValueString(), err.Error()))
+		return
+	}
+
+	params := map[string]any{
+		"name":    fullName,
+		"type":    "VOLUME",
+		"volsize": volsizeBytes,
+	}
+
+	if !data.Volblocksize.IsNull() && !data.Volblocksize.IsUnknown() {
+		params["volblocksize"] = data.Volblocksize.ValueString()
+	}
+	if !data.Sparse.IsNull() && !data.Sparse.IsUnknown() {
+		params["sparse"] = data.Sparse.ValueBool()
+	}
+	if !data.ForceSize.IsNull() && !data.ForceSize.IsUnknown() {
+		params["force_size"] = data.ForceSize.ValueBool()
+	}
+	if !data.Compression.IsNull() && !data.Compression.IsUnknown() {
+		params["compression"] = data.Compression.ValueString()
+	}
+	if !data.Comments.IsNull() && !data.Comments.IsUnknown() {
+		params["comments"] = data.Comments.ValueString()
+	}
+
+	result, err := r.client.Call(ctx, "pool.dataset.create", params)
+	if err != nil {
+		resp.Diagnostics.AddError(
+			"Unable to Create Zvol",
+			fmt.Sprintf("Unable to create zvol %q: %s", fullName, err.Error()),
+		)
+		return
+	}
+
+	// Parse create response to get ID
+	var createResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(result, &createResp); err != nil {
+		resp.Diagnostics.AddError("Unable to Parse Response", fmt.Sprintf("Unable to parse create response: %s", err.Error()))
+		return
+	}
+
+	// Query to get all computed attributes
+	r.readZvolAfterCreate(ctx, createResp.ID, &data, resp)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *ZvolResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
-	resp.Diagnostics.AddError("Not Implemented", "Read is not yet implemented")
+	var data ZvolResourceModel
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	zvolID := data.ID.ValueString()
+
+	raw, err := queryPoolDataset(ctx, r.client, zvolID)
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to Read Zvol", fmt.Sprintf("Unable to read zvol %q: %s", zvolID, err.Error()))
+		return
+	}
+
+	if raw == nil {
+		resp.State.RemoveResource(ctx)
+		return
+	}
+
+	var zvol zvolQueryResponse
+	if err := json.Unmarshal(raw, &zvol); err != nil {
+		resp.Diagnostics.AddError("Unable to Parse Response", fmt.Sprintf("Unable to parse zvol response: %s", err.Error()))
+		return
+	}
+
+	mapZvolToModel(&zvol, &data)
+
+	// Populate pool/path from ID if not set (e.g., after import)
+	if data.Pool.IsNull() && data.Path.IsNull() && data.Parent.IsNull() {
+		pool, path := poolDatasetIDToParts(zvol.ID)
+		data.Pool = types.StringValue(pool)
+		data.Path = types.StringValue(path)
+	}
+
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *ZvolResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -144,4 +248,39 @@ func (r *ZvolResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 
 func (r *ZvolResource) ImportState(ctx context.Context, req resource.ImportStateRequest, resp *resource.ImportStateResponse) {
 	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
+}
+
+// readZvolAfterCreate queries a zvol and maps it into the model after creation.
+func (r *ZvolResource) readZvolAfterCreate(ctx context.Context, zvolID string, data *ZvolResourceModel, resp *resource.CreateResponse) {
+	raw, err := queryPoolDataset(ctx, r.client, zvolID)
+	if err != nil {
+		resp.Diagnostics.AddError("Unable to Read Zvol After Create", fmt.Sprintf("Zvol was created but unable to read it: %s", err.Error()))
+		return
+	}
+	if raw == nil {
+		resp.Diagnostics.AddError("Zvol Not Found After Create", fmt.Sprintf("Zvol %q was created but could not be found", zvolID))
+		return
+	}
+
+	var zvol zvolQueryResponse
+	if err := json.Unmarshal(raw, &zvol); err != nil {
+		resp.Diagnostics.AddError("Unable to Parse Response", fmt.Sprintf("Unable to parse zvol response: %s", err.Error()))
+		return
+	}
+
+	mapZvolToModel(&zvol, data)
+}
+
+// mapZvolToModel maps a query response to the resource model.
+func mapZvolToModel(zvol *zvolQueryResponse, data *ZvolResourceModel) {
+	data.ID = types.StringValue(zvol.ID)
+	data.Volsize = customtypes.NewSizeStringValue(fmt.Sprintf("%d", zvol.Volsize.Parsed))
+	data.Volblocksize = types.StringValue(zvol.Volblocksize.Value)
+	data.Compression = types.StringValue(zvol.Compression.Value)
+
+	if zvol.Comments.Value != "" {
+		data.Comments = types.StringValue(zvol.Comments.Value)
+	} else {
+		data.Comments = types.StringNull()
+	}
 }

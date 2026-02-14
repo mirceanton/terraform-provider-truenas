@@ -2,10 +2,14 @@ package resources
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
+	"github.com/deevus/terraform-provider-truenas/internal/client"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
@@ -45,6 +49,236 @@ func TestZvolResource_Schema(t *testing.T) {
 		if _, ok := schemaResp.Schema.Attributes[attr]; !ok {
 			t.Errorf("missing expected attribute %q", attr)
 		}
+	}
+}
+
+func TestZvolResource_Create_Basic(t *testing.T) {
+	var createCalled bool
+	var createParams map[string]any
+
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.dataset.create" {
+					createCalled = true
+					createParams = params.(map[string]any)
+					return json.RawMessage(`{"id":"tank/myvol"}`), nil
+				}
+				if method == "pool.dataset.query" {
+					return json.RawMessage(mockZvolQueryResponse("tank/myvol", "lz4", "", 10737418240, "16K", false)), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+	planValue := createZvolModelValue(defaultZvolPlanParams())
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if !createCalled {
+		t.Fatal("expected pool.dataset.create to be called")
+	}
+	if createParams["name"] != "tank/myvol" {
+		t.Errorf("expected name 'tank/myvol', got %v", createParams["name"])
+	}
+	if createParams["type"] != "VOLUME" {
+		t.Errorf("expected type 'VOLUME', got %v", createParams["type"])
+	}
+	if createParams["volsize"] != int64(10737418240) {
+		t.Errorf("expected volsize 10737418240, got %v", createParams["volsize"])
+	}
+
+	var model ZvolResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+	if model.ID.ValueString() != "tank/myvol" {
+		t.Errorf("expected ID 'tank/myvol', got %q", model.ID.ValueString())
+	}
+}
+
+func TestZvolResource_Create_WithOptionalFields(t *testing.T) {
+	var createParams map[string]any
+
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				if method == "pool.dataset.create" {
+					createParams = params.(map[string]any)
+					return json.RawMessage(`{"id":"tank/myvol"}`), nil
+				}
+				if method == "pool.dataset.query" {
+					return json.RawMessage(mockZvolQueryResponse("tank/myvol", "zstd", "test vol", 10737418240, "64K", true)), nil
+				}
+				return nil, nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+	p := defaultZvolPlanParams()
+	p.Volblocksize = strPtr("64K")
+	p.Sparse = boolPtr(true)
+	p.Compression = strPtr("zstd")
+	p.Comments = strPtr("test vol")
+	planValue := createZvolModelValue(p)
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+	if createParams["volblocksize"] != "64K" {
+		t.Errorf("expected volblocksize '64K', got %v", createParams["volblocksize"])
+	}
+	if createParams["sparse"] != true {
+		t.Errorf("expected sparse true, got %v", createParams["sparse"])
+	}
+	if createParams["compression"] != "zstd" {
+		t.Errorf("expected compression 'zstd', got %v", createParams["compression"])
+	}
+	if createParams["comments"] != "test vol" {
+		t.Errorf("expected comments 'test vol', got %v", createParams["comments"])
+	}
+}
+
+func TestZvolResource_Create_InvalidName(t *testing.T) {
+	r := &ZvolResource{client: &client.MockClient{}}
+
+	schemaResp := getZvolResourceSchema(t)
+	p := zvolModelParams{Volsize: strPtr("10G")} // no pool/path
+	planValue := createZvolModelValue(p)
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for invalid name")
+	}
+}
+
+func TestZvolResource_Create_APIError(t *testing.T) {
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return nil, errors.New("pool not found")
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+	planValue := createZvolModelValue(defaultZvolPlanParams())
+
+	req := resource.CreateRequest{
+		Plan: tfsdk.Plan{Schema: schemaResp.Schema, Raw: planValue},
+	}
+	resp := &resource.CreateResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Create(context.Background(), req, resp)
+
+	if !resp.Diagnostics.HasError() {
+		t.Fatal("expected error for API failure")
+	}
+}
+
+func TestZvolResource_Read_Basic(t *testing.T) {
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(mockZvolQueryResponse("tank/myvol", "lz4", "", 10737418240, "16K", false)), nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+	p := defaultZvolPlanParams()
+	p.ID = strPtr("tank/myvol")
+	stateValue := createZvolModelValue(p)
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Read(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	var model ZvolResourceModel
+	diags := resp.State.Get(context.Background(), &model)
+	if diags.HasError() {
+		t.Fatalf("failed to get state: %v", diags)
+	}
+	if model.ID.ValueString() != "tank/myvol" {
+		t.Errorf("expected ID 'tank/myvol', got %q", model.ID.ValueString())
+	}
+	if model.Compression.ValueString() != "lz4" {
+		t.Errorf("expected compression 'lz4', got %q", model.Compression.ValueString())
+	}
+}
+
+func TestZvolResource_Read_NotFound(t *testing.T) {
+	r := &ZvolResource{
+		client: &client.MockClient{
+			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
+				return json.RawMessage(`[]`), nil
+			},
+		},
+	}
+
+	schemaResp := getZvolResourceSchema(t)
+	p := defaultZvolPlanParams()
+	p.ID = strPtr("tank/deleted")
+	stateValue := createZvolModelValue(p)
+
+	req := resource.ReadRequest{
+		State: tfsdk.State{Schema: schemaResp.Schema, Raw: stateValue},
+	}
+	resp := &resource.ReadResponse{
+		State: tfsdk.State{Schema: schemaResp.Schema},
+	}
+
+	r.Read(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	// State should be removed (resource deleted outside Terraform)
+	if !resp.State.Raw.IsNull() {
+		t.Error("expected state to be removed for deleted zvol")
 	}
 }
 
