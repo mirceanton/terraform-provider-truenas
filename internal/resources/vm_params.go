@@ -129,7 +129,7 @@ func buildDiskDeviceParams(disk *VMDiskModel, vmID int64) map[string]any {
 	if !disk.IOType.IsNull() && !disk.IOType.IsUnknown() {
 		attrs["iotype"] = disk.IOType.ValueString()
 	}
-	if !disk.Serial.IsNull() {
+	if !disk.Serial.IsNull() && !disk.Serial.IsUnknown() {
 		attrs["serial"] = disk.Serial.ValueString()
 	}
 
@@ -166,7 +166,7 @@ func buildRawDeviceParams(raw *VMRawModel, vmID int64) map[string]any {
 	if !raw.IOType.IsNull() && !raw.IOType.IsUnknown() {
 		attrs["iotype"] = raw.IOType.ValueString()
 	}
-	if !raw.Serial.IsNull() {
+	if !raw.Serial.IsNull() && !raw.Serial.IsUnknown() {
 		attrs["serial"] = raw.Serial.ValueString()
 	}
 
