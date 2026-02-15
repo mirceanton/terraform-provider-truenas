@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
+## [0.14.0] - 2026-02-15
+
+
+### Added
+
+- **vm:** Scaffold truenas_vm resource with schema and model types
+- **vm:** Implement full CRUD, device reconciliation, and state management
+- **vm:** Add command_line_args attribute
+- **zvol:** Scaffold truenas_zvol resource with schema and model types
+- **zvol:** Implement Create and Read operations
+- **zvol:** Implement Update and Delete operations
+- **vm:** Add exists attribute to raw device block
+
+### Changed
+
+- **vm:** Split vm.go into focused sub-modules
+- Extract shared pool/dataset helpers for zvol reuse
+- Add BaseResource with Configure and ImportState
+- Migrate 9 resources to embed BaseResource
+- Migrate 4 custom-ImportState resources to embed BaseResource
+
+### Documentation
+
+- Expand VM API documentation with detailed parameters and device attributes
+- Add truenas_vm resource implementation plan
+- Add truenas_vm resource example and documentation
+- Add truenas_zvol resource implementation plan
+- Add truenas_zvol resource example and documentation
+- Remove completed truenas_vm resource implementation plan
+- Add implementation plan for BaseResource extraction
+
+### Fixed
+
+- **vm:** Make display password required
+- **vm:** Resolve inconsistent result after apply for exists and serial
+- **vm:** Skip serial in device params when unknown (Computed)
+
+### Miscellaneous
+
+- Clean up plan docs
+
+### Testing
+
+- **vm:** Add comprehensive tests for CRUD, device reconciliation, and helpers
+- **vm:** Add command_line_args to buildCreateParams and buildUpdateParams tests
+- **zvol:** Add import, edge case, and shared helper tests
+
 ## [0.13.0] - 2026-02-07
 
 
@@ -236,6 +283,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **resources:** Add schedule validation tests for cloud sync task
 - **resources:** Add encryption tests for cloud sync task
 
+### Ci
+
+- Fix release process with git-cliff integration
+
 ## [0.5.0] - 2026-01-16
 
 
@@ -292,10 +343,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Build
 
 - Enable git-cliff for automated changelog generation
-
-### Ci
-
-- Fix release process with git-cliff integration
 
 ## [0.3.0] - 2026-01-14
 
