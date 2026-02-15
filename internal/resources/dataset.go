@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/deevus/terraform-provider-truenas/internal/api"
 	"github.com/deevus/terraform-provider-truenas/internal/client"
@@ -65,17 +64,6 @@ type datasetQueryResponse struct {
 	Atime       propertyValueField `json:"atime"`
 }
 
-// propertyValueField represents the nested property value in API responses.
-type propertyValueField struct {
-	Value string `json:"value"`
-}
-
-// sizePropertyField represents a size property with parsed bytes value.
-type sizePropertyField struct {
-	Parsed int64  `json:"parsed"`
-	Value  string `json:"value"`
-}
-
 // datasetStatResponse represents the JSON response from filesystem.stat.
 type datasetStatResponse struct {
 	Mode int64 `json:"mode"`
@@ -86,22 +74,19 @@ type datasetStatResponse struct {
 // queryDataset queries a dataset by ID and returns the response.
 // Returns nil if the dataset is not found.
 func (r *DatasetResource) queryDataset(ctx context.Context, datasetID string) (*datasetQueryResponse, error) {
-	filter := [][]any{{"id", "=", datasetID}}
-	result, err := r.client.Call(ctx, "pool.dataset.query", filter)
+	raw, err := queryPoolDataset(ctx, r.client, datasetID)
 	if err != nil {
 		return nil, err
 	}
-
-	var datasets []datasetQueryResponse
-	if err := json.Unmarshal(result, &datasets); err != nil {
-		return nil, fmt.Errorf("parse response: %w", err)
-	}
-
-	if len(datasets) == 0 {
+	if raw == nil {
 		return nil, nil
 	}
 
-	return &datasets[0], nil
+	var ds datasetQueryResponse
+	if err := json.Unmarshal(raw, &ds); err != nil {
+		return nil, fmt.Errorf("parse dataset: %w", err)
+	}
+	return &ds, nil
 }
 
 // mapDatasetToModel maps API response fields to the Terraform model.
@@ -486,12 +471,11 @@ func (r *DatasetResource) Read(ctx context.Context, req resource.ReadRequest, re
 	mapDatasetToModel(ds, &data)
 
 	// Populate pool/path from ID if not set (e.g., after import)
-	// ID format is "pool/path/to/dataset"
 	if data.Pool.IsNull() && data.Path.IsNull() && data.Parent.IsNull() && data.Name.IsNull() {
-		parts := strings.SplitN(ds.ID, "/", 2)
-		if len(parts) == 2 {
-			data.Pool = types.StringValue(parts[0])
-			data.Path = types.StringValue(parts[1])
+		pool, path := poolDatasetIDToParts(ds.ID)
+		if path != "" {
+			data.Pool = types.StringValue(pool)
+			data.Path = types.StringValue(path)
 		}
 	}
 
@@ -623,23 +607,14 @@ func (r *DatasetResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
-	// Call the TrueNAS API
 	datasetID := data.ID.ValueString()
+	recursive := !data.ForceDestroy.IsNull() && data.ForceDestroy.ValueBool()
 
-	// Build delete params - API expects [id, options] when options provided
-	var params any = datasetID
-	if !data.ForceDestroy.IsNull() && data.ForceDestroy.ValueBool() {
-		params = []any{datasetID, map[string]bool{"recursive": true}}
-	}
-
-	_, err := r.client.Call(ctx, "pool.dataset.delete", params)
-
-	if err != nil {
+	if err := deletePoolDataset(ctx, r.client, datasetID, recursive); err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Delete Dataset",
 			fmt.Sprintf("Unable to delete dataset %q: %s", datasetID, err.Error()),
 		)
-		return
 	}
 }
 
@@ -648,37 +623,8 @@ func (r *DatasetResource) ImportState(ctx context.Context, req resource.ImportSt
 }
 
 // getFullName returns the full dataset name from the model.
-// It supports two modes:
-// 1. pool + path (e.g., pool="tank", path="data/apps" -> "tank/data/apps")
-// 2. parent + path (new preferred way) or parent + name (deprecated)
-//    (e.g., parent="tank/data", path="apps" -> "tank/data/apps")
-// If neither mode is valid, it returns an empty string.
-// If both modes are provided, pool/path takes precedence.
 func getFullName(data *DatasetResourceModel) string {
-	// Mode 1: pool + path
-	hasPool := !data.Pool.IsNull() && !data.Pool.IsUnknown() && data.Pool.ValueString() != ""
-	hasPath := !data.Path.IsNull() && !data.Path.IsUnknown() && data.Path.ValueString() != ""
-
-	if hasPool && hasPath {
-		return fmt.Sprintf("%s/%s", data.Pool.ValueString(), data.Path.ValueString())
-	}
-
-	// Mode 2: parent + path (new preferred way) or parent + name (deprecated)
-	hasParent := !data.Parent.IsNull() && !data.Parent.IsUnknown() && data.Parent.ValueString() != ""
-	hasName := !data.Name.IsNull() && !data.Name.IsUnknown() && data.Name.ValueString() != ""
-
-	if hasParent {
-		// Prefer path over name when both are set
-		if hasPath {
-			return fmt.Sprintf("%s/%s", data.Parent.ValueString(), data.Path.ValueString())
-		}
-		if hasName {
-			return fmt.Sprintf("%s/%s", data.Parent.ValueString(), data.Name.ValueString())
-		}
-	}
-
-	// Invalid configuration
-	return ""
+	return poolDatasetFullName(data.Pool, data.Path, data.Parent, data.Name)
 }
 
 // hasPermissions returns true if any permission attribute (mode, uid, gid) is set.
