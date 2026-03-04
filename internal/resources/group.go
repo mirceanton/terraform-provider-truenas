@@ -106,7 +106,7 @@ func (r *GroupResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	params := buildGroupCreateParams(ctx, &data)
 
-	result, err := r.client.Call(ctx, "group.create", params)
+	result, err := r.services.Client.Call(ctx, "group.create", params)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create Group",
@@ -203,7 +203,7 @@ func (r *GroupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	params := buildGroupUpdateParams(ctx, &plan)
 
-	_, err = r.client.Call(ctx, "group.update", []any{id, params})
+	_, err = r.services.Client.Call(ctx, "group.update", []any{id, params})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Update Group",
@@ -251,7 +251,7 @@ func (r *GroupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 		return
 	}
 
-	_, err = r.client.Call(ctx, "group.delete", []any{id, map[string]any{"delete_users": false}})
+	_, err = r.services.Client.Call(ctx, "group.delete", []any{id, map[string]any{"delete_users": false}})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Delete Group",
@@ -297,7 +297,7 @@ func (r *GroupResource) queryGroup(ctx context.Context, id int64) (*api.GroupRes
 // queryGroupByField queries a group by an arbitrary field and returns the response.
 func (r *GroupResource) queryGroupByField(ctx context.Context, field string, value int64) (*api.GroupResponse, error) {
 	filter := [][]any{{field, "=", value}}
-	result, err := r.client.Call(ctx, "group.query", filter)
+	result, err := r.services.Client.Call(ctx, "group.query", filter)
 	if err != nil {
 		return nil, err
 	}

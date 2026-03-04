@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"github.com/deevus/terraform-provider-truenas/internal/api"
-	"github.com/deevus/terraform-provider-truenas/internal/client"
+	"github.com/deevus/truenas-go/client"
+	"github.com/deevus/terraform-provider-truenas/internal/services"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
@@ -50,10 +51,8 @@ func TestUserResource_Metadata(t *testing.T) {
 func TestUserResource_Configure_Success(t *testing.T) {
 	r := NewUserResource().(*UserResource)
 
-	mockClient := &client.MockClient{}
-
 	req := resource.ConfigureRequest{
-		ProviderData: mockClient,
+		ProviderData: &services.TrueNASServices{Client: &client.MockClient{}},
 	}
 	resp := &resource.ConfigureResponse{}
 
@@ -63,8 +62,8 @@ func TestUserResource_Configure_Success(t *testing.T) {
 		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
 	}
 
-	if r.client == nil {
-		t.Error("expected client to be set")
+	if r.services == nil {
+		t.Error("expected services to be set")
 	}
 }
 
@@ -301,7 +300,7 @@ func TestUserResource_Create_Success(t *testing.T) {
 	var capturedParams any
 
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.create" {
 					capturedMethod = method
@@ -313,7 +312,7 @@ func TestUserResource_Create_Success(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -386,7 +385,7 @@ func TestUserResource_Create_WithPassword(t *testing.T) {
 	var capturedParams any
 
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.create" {
 					capturedParams = params
@@ -397,7 +396,7 @@ func TestUserResource_Create_WithPassword(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -446,7 +445,7 @@ func TestUserResource_Create_WithGroupID(t *testing.T) {
 	var capturedParams any
 
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.create" {
 					capturedParams = params
@@ -457,7 +456,7 @@ func TestUserResource_Create_WithGroupID(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -509,7 +508,7 @@ func TestUserResource_Create_WithAllOptions(t *testing.T) {
 	var capturedParams any
 
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.create" {
 					capturedParams = params
@@ -541,7 +540,7 @@ func TestUserResource_Create_WithAllOptions(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -633,11 +632,11 @@ func TestUserResource_Create_WithAllOptions(t *testing.T) {
 
 func TestUserResource_Create_APIError(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("connection refused")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -678,11 +677,11 @@ func TestUserResource_Create_APIError(t *testing.T) {
 
 func TestUserResource_Read_Success(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(userQueryResponse), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -751,11 +750,11 @@ func TestUserResource_Read_Success(t *testing.T) {
 
 func TestUserResource_Read_NotFound(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`[]`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -797,11 +796,11 @@ func TestUserResource_Read_NotFound(t *testing.T) {
 
 func TestUserResource_Read_APIError(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("connection refused")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -839,11 +838,11 @@ func TestUserResource_Read_APIError(t *testing.T) {
 
 func TestUserResource_Read_PreservesPassword(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(userQueryResponse), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -895,7 +894,7 @@ func TestUserResource_Update_Success(t *testing.T) {
 	var capturedUpdateData map[string]any
 
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.update" {
 					capturedMethod = method
@@ -930,7 +929,7 @@ func TestUserResource_Update_Success(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1025,7 +1024,7 @@ func TestUserResource_Update_WithPassword(t *testing.T) {
 	var capturedUpdateData map[string]any
 
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.update" {
 					args := params.([]any)
@@ -1037,7 +1036,7 @@ func TestUserResource_Update_WithPassword(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1100,11 +1099,11 @@ func TestUserResource_Update_WithPassword(t *testing.T) {
 
 func TestUserResource_Update_APIError(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("connection refused")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1162,13 +1161,13 @@ func TestUserResource_Delete_Success(t *testing.T) {
 	var capturedArgs []any
 
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				capturedMethod = method
 				capturedArgs = params.([]any)
 				return json.RawMessage(`true`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1218,11 +1217,11 @@ func TestUserResource_Delete_Success(t *testing.T) {
 
 func TestUserResource_Delete_APIError(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("user in use")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1256,14 +1255,14 @@ func TestUserResource_Delete_APIError(t *testing.T) {
 
 func TestUserResource_Create_QueryError(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.create" {
 					return json.RawMessage(`{"id": 50}`), nil
 				}
 				return nil, errors.New("query failed")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1288,14 +1287,14 @@ func TestUserResource_Create_QueryError(t *testing.T) {
 
 func TestUserResource_Create_QueryNotFound(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.create" {
 					return json.RawMessage(`{"id": 50}`), nil
 				}
 				return json.RawMessage(`[]`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1320,11 +1319,11 @@ func TestUserResource_Create_QueryNotFound(t *testing.T) {
 
 func TestUserResource_Create_ParseError(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`not json`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1351,7 +1350,7 @@ func TestUserResource_Update_WithAllOptionalFields(t *testing.T) {
 	var capturedUpdateData map[string]any
 
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.update" {
 					args := params.([]any)
@@ -1375,7 +1374,7 @@ func TestUserResource_Update_WithAllOptionalFields(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1433,14 +1432,14 @@ func TestUserResource_Update_WithAllOptionalFields(t *testing.T) {
 
 func TestUserResource_Update_QueryError(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.update" {
 					return json.RawMessage(`{"id": 50}`), nil
 				}
 				return nil, errors.New("query failed")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)
@@ -1470,14 +1469,14 @@ func TestUserResource_Update_QueryError(t *testing.T) {
 
 func TestUserResource_Update_QueryNotFound(t *testing.T) {
 	r := &UserResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "user.update" {
 					return json.RawMessage(`{"id": 50}`), nil
 				}
 				return json.RawMessage(`[]`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getUserResourceSchema(t)

@@ -197,7 +197,7 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 
 	params := buildUserCreateParams(ctx, &data)
 
-	result, err := r.client.Call(ctx, "user.create", params)
+	result, err := r.services.Client.Call(ctx, "user.create", params)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Create User",
@@ -296,7 +296,7 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 
 	params := buildUserUpdateParams(ctx, &plan)
 
-	_, err = r.client.Call(ctx, "user.update", []any{id, params})
+	_, err = r.services.Client.Call(ctx, "user.update", []any{id, params})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Update User",
@@ -344,7 +344,7 @@ func (r *UserResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	_, err = r.client.Call(ctx, "user.delete", []any{id, map[string]any{"delete_group": true}})
+	_, err = r.services.Client.Call(ctx, "user.delete", []any{id, map[string]any{"delete_group": true}})
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Delete User",
@@ -390,7 +390,7 @@ func (r *UserResource) queryUser(ctx context.Context, id int64) (*api.UserRespon
 // queryUserByField queries a user by an arbitrary field and returns the response.
 func (r *UserResource) queryUserByField(ctx context.Context, field string, value int64) (*api.UserResponse, error) {
 	filter := [][]any{{field, "=", value}}
-	result, err := r.client.Call(ctx, "user.query", filter)
+	result, err := r.services.Client.Call(ctx, "user.query", filter)
 	if err != nil {
 		return nil, err
 	}

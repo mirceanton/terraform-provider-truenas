@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	"github.com/deevus/terraform-provider-truenas/internal/api"
-	"github.com/deevus/terraform-provider-truenas/internal/client"
+	"github.com/deevus/terraform-provider-truenas/internal/services"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -18,7 +18,7 @@ var _ datasource.DataSourceWithConfigure = &UserDataSource{}
 
 // UserDataSource defines the data source implementation.
 type UserDataSource struct {
-	client client.Client
+	services *services.TrueNASServices
 }
 
 // UserDataSourceModel describes the data source data model.
@@ -140,16 +140,16 @@ func (d *UserDataSource) Configure(ctx context.Context, req datasource.Configure
 		return
 	}
 
-	c, ok := req.ProviderData.(client.Client)
+	s, ok := req.ProviderData.(*services.TrueNASServices)
 	if !ok {
 		resp.Diagnostics.AddError(
 			"Unexpected Data Source Configure Type",
-			fmt.Sprintf("Expected client.Client, got: %T. Please report this issue to the provider developers.", req.ProviderData),
+			fmt.Sprintf("Expected *services.TrueNASServices, got: %T. Please report this issue to the provider developers.", req.ProviderData),
 		)
 		return
 	}
 
-	d.client = c
+	d.services = s
 }
 
 func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
@@ -162,7 +162,7 @@ func (d *UserDataSource) Read(ctx context.Context, req datasource.ReadRequest, r
 
 	filter := [][]string{{"username", "=", data.Username.ValueString()}}
 
-	result, err := d.client.Call(ctx, "user.query", filter)
+	result, err := d.services.Client.Call(ctx, "user.query", filter)
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Read User",

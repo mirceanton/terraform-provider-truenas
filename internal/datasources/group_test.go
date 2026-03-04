@@ -6,7 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/deevus/terraform-provider-truenas/internal/client"
+	"github.com/deevus/truenas-go/client"
+	"github.com/deevus/terraform-provider-truenas/internal/services"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -70,7 +71,7 @@ func TestGroupDataSource_Schema(t *testing.T) {
 func TestGroupDataSource_Configure_Success(t *testing.T) {
 	ds := NewGroupDataSource().(*GroupDataSource)
 
-	req := datasource.ConfigureRequest{ProviderData: &client.MockClient{}}
+	req := datasource.ConfigureRequest{ProviderData: &services.TrueNASServices{Client: &client.MockClient{}}}
 	resp := &datasource.ConfigureResponse{}
 
 	ds.Configure(context.Background(), req, resp)
@@ -145,7 +146,7 @@ func createGroupReadRequest(t *testing.T, name string) (datasource.ReadRequest, 
 
 func TestGroupDataSource_Read_Success(t *testing.T) {
 	ds := &GroupDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`[{
 					"id": 10,
@@ -160,7 +161,7 @@ func TestGroupDataSource_Read_Success(t *testing.T) {
 					"immutable": false
 				}]`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createGroupReadRequest(t, "developers")
@@ -199,11 +200,11 @@ func TestGroupDataSource_Read_Success(t *testing.T) {
 
 func TestGroupDataSource_Read_NotFound(t *testing.T) {
 	ds := &GroupDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`[]`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createGroupReadRequest(t, "nonexistent")
@@ -220,11 +221,11 @@ func TestGroupDataSource_Read_NotFound(t *testing.T) {
 
 func TestGroupDataSource_Read_APIError(t *testing.T) {
 	ds := &GroupDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("connection failed")
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createGroupReadRequest(t, "developers")
@@ -241,11 +242,11 @@ func TestGroupDataSource_Read_APIError(t *testing.T) {
 
 func TestGroupDataSource_Read_InvalidJSON(t *testing.T) {
 	ds := &GroupDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`not valid json`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createGroupReadRequest(t, "developers")
@@ -264,7 +265,7 @@ func TestGroupDataSource_Read_VerifyFilterParams(t *testing.T) {
 	var capturedParams any
 
 	ds := &GroupDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				capturedParams = params
 				return json.RawMessage(`[{
@@ -274,7 +275,7 @@ func TestGroupDataSource_Read_VerifyFilterParams(t *testing.T) {
 					"users": [], "local": true, "immutable": false
 				}]`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createGroupReadRequest(t, "wheel")

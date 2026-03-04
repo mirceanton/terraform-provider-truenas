@@ -6,7 +6,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/deevus/terraform-provider-truenas/internal/client"
+	"github.com/deevus/truenas-go/client"
+	"github.com/deevus/terraform-provider-truenas/internal/services"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -75,7 +76,7 @@ func TestUserDataSource_Schema(t *testing.T) {
 func TestUserDataSource_Configure_Success(t *testing.T) {
 	ds := NewUserDataSource().(*UserDataSource)
 
-	req := datasource.ConfigureRequest{ProviderData: &client.MockClient{}}
+	req := datasource.ConfigureRequest{ProviderData: &services.TrueNASServices{Client: &client.MockClient{}}}
 	resp := &datasource.ConfigureResponse{}
 
 	ds.Configure(context.Background(), req, resp)
@@ -168,7 +169,7 @@ func createUserReadRequest(t *testing.T, username string) (datasource.ReadReques
 
 func TestUserDataSource_Read_Success(t *testing.T) {
 	ds := &UserDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`[{
 					"id": 1,
@@ -193,7 +194,7 @@ func TestUserDataSource_Read_Success(t *testing.T) {
 					"immutable": true
 				}]`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createUserReadRequest(t, "root")
@@ -256,7 +257,7 @@ func TestUserDataSource_Read_Success(t *testing.T) {
 
 func TestUserDataSource_Read_NullEmail(t *testing.T) {
 	ds := &UserDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`[{
 					"id": 5, "uid": 1000, "username": "testuser",
@@ -269,7 +270,7 @@ func TestUserDataSource_Read_NullEmail(t *testing.T) {
 					"builtin": false, "local": true, "immutable": false
 				}]`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createUserReadRequest(t, "testuser")
@@ -296,11 +297,11 @@ func TestUserDataSource_Read_NullEmail(t *testing.T) {
 
 func TestUserDataSource_Read_NotFound(t *testing.T) {
 	ds := &UserDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`[]`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createUserReadRequest(t, "nonexistent")
@@ -317,11 +318,11 @@ func TestUserDataSource_Read_NotFound(t *testing.T) {
 
 func TestUserDataSource_Read_APIError(t *testing.T) {
 	ds := &UserDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("connection failed")
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createUserReadRequest(t, "root")
@@ -338,11 +339,11 @@ func TestUserDataSource_Read_APIError(t *testing.T) {
 
 func TestUserDataSource_Read_InvalidJSON(t *testing.T) {
 	ds := &UserDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`not valid json`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createUserReadRequest(t, "root")
@@ -361,7 +362,7 @@ func TestUserDataSource_Read_VerifyFilterParams(t *testing.T) {
 	var capturedParams any
 
 	ds := &UserDataSource{
-		client: &client.MockClient{
+		services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				capturedParams = params
 				return json.RawMessage(`[{
@@ -374,7 +375,7 @@ func TestUserDataSource_Read_VerifyFilterParams(t *testing.T) {
 					"builtin": true, "local": true, "immutable": true
 				}]`), nil
 			},
-		},
+		}},
 	}
 
 	req, schemaResp := createUserReadRequest(t, "root")

@@ -8,7 +8,8 @@ import (
 	"testing"
 
 	"github.com/deevus/terraform-provider-truenas/internal/api"
-	"github.com/deevus/terraform-provider-truenas/internal/client"
+	"github.com/deevus/truenas-go/client"
+	"github.com/deevus/terraform-provider-truenas/internal/services"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/tfsdk"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
@@ -49,10 +50,8 @@ func TestGroupResource_Metadata(t *testing.T) {
 func TestGroupResource_Configure_Success(t *testing.T) {
 	r := NewGroupResource().(*GroupResource)
 
-	mockClient := &client.MockClient{}
-
 	req := resource.ConfigureRequest{
-		ProviderData: mockClient,
+		ProviderData: &services.TrueNASServices{Client: &client.MockClient{}},
 	}
 	resp := &resource.ConfigureResponse{}
 
@@ -62,8 +61,8 @@ func TestGroupResource_Configure_Success(t *testing.T) {
 		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
 	}
 
-	if r.client == nil {
-		t.Error("expected client to be set")
+	if r.services == nil {
+		t.Error("expected services to be set")
 	}
 }
 
@@ -198,7 +197,7 @@ func TestGroupResource_Create_Success(t *testing.T) {
 	var capturedParams any
 
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.create" {
 					capturedMethod = method
@@ -221,7 +220,7 @@ func TestGroupResource_Create_Success(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -291,7 +290,7 @@ func TestGroupResource_Create_WithGID(t *testing.T) {
 	var capturedParams any
 
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.create" {
 					capturedParams = params
@@ -313,7 +312,7 @@ func TestGroupResource_Create_WithGID(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -356,7 +355,7 @@ func TestGroupResource_Create_WithSudoCommands(t *testing.T) {
 	var capturedParams any
 
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.create" {
 					capturedParams = params
@@ -378,7 +377,7 @@ func TestGroupResource_Create_WithSudoCommands(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -442,11 +441,11 @@ func TestGroupResource_Create_WithSudoCommands(t *testing.T) {
 
 func TestGroupResource_Create_APIError(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("connection refused")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -481,7 +480,7 @@ func TestGroupResource_Create_APIError(t *testing.T) {
 
 func TestGroupResource_Read_Success(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`[{
 					"id": 100,
@@ -496,7 +495,7 @@ func TestGroupResource_Read_Success(t *testing.T) {
 					"immutable": false
 				}]`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -547,11 +546,11 @@ func TestGroupResource_Read_Success(t *testing.T) {
 
 func TestGroupResource_Read_NotFound(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`[]`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -588,11 +587,11 @@ func TestGroupResource_Read_NotFound(t *testing.T) {
 
 func TestGroupResource_Read_APIError(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("connection refused")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -629,7 +628,7 @@ func TestGroupResource_Update_Success(t *testing.T) {
 	var capturedUpdateData map[string]any
 
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.update" {
 					capturedMethod = method
@@ -654,7 +653,7 @@ func TestGroupResource_Update_Success(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -730,11 +729,11 @@ func TestGroupResource_Update_Success(t *testing.T) {
 
 func TestGroupResource_Update_APIError(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("connection refused")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -782,13 +781,13 @@ func TestGroupResource_Delete_Success(t *testing.T) {
 	var capturedArgs []any
 
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				capturedMethod = method
 				capturedArgs = params.([]any)
 				return json.RawMessage(`true`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -833,11 +832,11 @@ func TestGroupResource_Delete_Success(t *testing.T) {
 
 func TestGroupResource_Delete_APIError(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return nil, errors.New("group in use")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -867,7 +866,7 @@ func TestGroupResource_Delete_APIError(t *testing.T) {
 func TestGroupResource_Create_QueryError(t *testing.T) {
 	callCount := 0
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.create" {
 					return json.RawMessage(`100`), nil
@@ -875,7 +874,7 @@ func TestGroupResource_Create_QueryError(t *testing.T) {
 				callCount++
 				return nil, errors.New("query failed")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -900,14 +899,14 @@ func TestGroupResource_Create_QueryError(t *testing.T) {
 
 func TestGroupResource_Create_QueryNotFound(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.create" {
 					return json.RawMessage(`100`), nil
 				}
 				return json.RawMessage(`[]`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -932,11 +931,11 @@ func TestGroupResource_Create_QueryNotFound(t *testing.T) {
 
 func TestGroupResource_Create_ParseError(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				return json.RawMessage(`not json`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -963,7 +962,7 @@ func TestGroupResource_Update_WithSudoCommands(t *testing.T) {
 	var capturedUpdateData map[string]any
 
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.update" {
 					args := params.([]any)
@@ -986,7 +985,7 @@ func TestGroupResource_Update_WithSudoCommands(t *testing.T) {
 				}
 				return nil, nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -1042,14 +1041,14 @@ func TestGroupResource_Update_WithSudoCommands(t *testing.T) {
 
 func TestGroupResource_Update_QueryError(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.update" {
 					return json.RawMessage(`{"id": 100}`), nil
 				}
 				return nil, errors.New("query failed")
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
@@ -1077,14 +1076,14 @@ func TestGroupResource_Update_QueryError(t *testing.T) {
 
 func TestGroupResource_Update_QueryNotFound(t *testing.T) {
 	r := &GroupResource{
-		BaseResource: BaseResource{client: &client.MockClient{
+		BaseResource: BaseResource{services: &services.TrueNASServices{Client: &client.MockClient{
 			CallFunc: func(ctx context.Context, method string, params any) (json.RawMessage, error) {
 				if method == "group.update" {
 					return json.RawMessage(`{"id": 100}`), nil
 				}
 				return json.RawMessage(`[]`), nil
 			},
-		}},
+		}}},
 	}
 
 	schemaResp := getGroupResourceSchema(t)
