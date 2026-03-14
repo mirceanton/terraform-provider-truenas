@@ -1116,12 +1116,14 @@ func TestUserResource_Update_NotFound(t *testing.T) {
 
 func TestUserResource_Delete_Success(t *testing.T) {
 	var capturedID int64
+	var capturedDeleteGroup bool
 
 	r := &UserResource{
 		BaseResource: BaseResource{services: &services.TrueNASServices{
 			User: &truenas.MockUserService{
 				DeleteFunc: func(ctx context.Context, id int64, deleteGroup bool) error {
 					capturedID = id
+					capturedDeleteGroup = deleteGroup
 					return nil
 				},
 			},
@@ -1158,6 +1160,57 @@ func TestUserResource_Delete_Success(t *testing.T) {
 
 	if capturedID != 50 {
 		t.Errorf("expected ID 50, got %d", capturedID)
+	}
+	if capturedDeleteGroup {
+		t.Error("expected deleteGroup false when group_create not set in state")
+	}
+}
+
+func TestUserResource_Delete_WithGroupCreate(t *testing.T) {
+	var capturedDeleteGroup bool
+
+	r := &UserResource{
+		BaseResource: BaseResource{services: &services.TrueNASServices{
+			User: &truenas.MockUserService{
+				DeleteFunc: func(ctx context.Context, id int64, deleteGroup bool) error {
+					capturedDeleteGroup = deleteGroup
+					return nil
+				},
+			},
+		}},
+	}
+
+	schemaResp := getUserResourceSchema(t)
+	stateValue := createUserModelValue(userModelParams{
+		ID:          "50",
+		UID:         big.NewFloat(1001),
+		Username:    "jdoe",
+		FullName:    "John Doe",
+		Email:       "john@example.com",
+		GroupCreate: true,
+		Home:        "/home/jdoe",
+		HomeMode:    "700",
+		Shell:       "/usr/bin/zsh",
+		SMB:         true,
+	})
+
+	req := resource.DeleteRequest{
+		State: tfsdk.State{
+			Schema: schemaResp.Schema,
+			Raw:    stateValue,
+		},
+	}
+
+	resp := &resource.DeleteResponse{}
+
+	r.Delete(context.Background(), req, resp)
+
+	if resp.Diagnostics.HasError() {
+		t.Fatalf("unexpected errors: %v", resp.Diagnostics)
+	}
+
+	if !capturedDeleteGroup {
+		t.Error("expected deleteGroup true when group_create=true in state")
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/int64planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
@@ -116,8 +117,11 @@ func (r *UserResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 				},
 			},
 			"group_create": schema.BoolAttribute{
-				Description: "Create a new primary group with the same name as the user. Only used during creation.",
+				Description: "Create a new primary group with the same name as the user. Changing this value forces the user to be destroyed and recreated.",
 				Optional:    true,
+				PlanModifiers: []planmodifier.Bool{
+					boolplanmodifier.RequiresReplace(),
+				},
 			},
 			"groups": schema.ListAttribute{
 				Description: "List of secondary group IDs.",
@@ -314,7 +318,7 @@ func (r *UserResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		return
 	}
 
-	err = r.services.User.Delete(ctx, id, true)
+	err = r.services.User.Delete(ctx, id, data.GroupCreate.ValueBool())
 	if err != nil {
 		resp.Diagnostics.AddError(
 			"Unable to Delete User",
